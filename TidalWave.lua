@@ -147,7 +147,7 @@ local function Load(Path, Name)
         end
         return require(Ref)
     else
-        local Function = shared.TidalWaveDev and loadfile(`TidalWave/{Path}`) or loadstring(game:HttpGet(`https://raw.githubusercontent.com/fluidnarrator30/Tidal-Wave/refs/heads/main/{Path}.lua`), Name)
+        local Function = shared.TidalWaveDev and loadfile(`TidalWave/{Path}`) or loadstring(game:HttpGet(`https://raw.githubusercontent.com/fluidnarrator30/Tidal-Wave/refs/heads/main/{Path}`), Name)
         if typeof(Function) == "function" then
             return Function()
         else
