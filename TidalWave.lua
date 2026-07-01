@@ -125,34 +125,38 @@ ProgressBarFill.Parent = ProgressBar
 
 local function DownloadFile(Path)
 	if not isfile(Path) then
+        local NewPath = Path:gsub("TidalWave/", "")
 		local Success, Result = pcall(function()
-			return game:HttpGet('https://raw.githubusercontent.com/7GrandDadPGN/VapeV4ForRoblox/'..readfile('newvape/profiles/commit.txt')..'/'..select(1, path:gsub('newvape/', '')), true)
+			return game:HttpGet(`https://raw.githubusercontent.com/fluidnarrator30/Tidal-Wave/refs/heads/main/{NewPath}`)
 		end)
-		if not Success or Result == '404: Not Found' then
-			Error(Result)
-		end
-		writefile(Path, Result)
+        if Success and Result ~= "404: Not Found" then
+            writefile(Path, Result)
+        end
 	end
 	return readfile(Path)
 end
 
 if not shared.TidalWaveDev then
     local Success, Result = pcall(function()
-        return game:HttpGet(`https://github.com/fluidnarrator30/Tidal-Wave/blob/main/Games/{game.PlaceId}.lua`)
+        return game:HttpGet(`https://raw.githubusercontent.com/fluidnarrator30/Tidal-Wave/refs/heads/main/{game.PlaceId}.lua`)
     end)
     if Success and Result ~= "404: Not Found" then
         writefile(`TidalWave/Games/{game.PlaceId}.lua`, Result)
     end
 end
 
-local GameSupported = isfile and isfile(`TidalWave/Games/{game.PlaceId}.lua`)
+local GameSupported = isfile(`TidalWave/Games/{game.PlaceId}.lua`)
 local CurrentLoadAmount = 0
 local LoadAmount = GameSupported and 5 or 4
 
-local function Load(Path, Name)
+local function IncrementBar(Name)
     CurrentLoadAmount += 1
     LoadingInfo.Text = `Loading {Name}...`
     TweenService:Create(ProgressBarFill, TweenInfo.new(0.4, Enum.EasingStyle.Exponential, Enum.EasingDirection.Out), {Size = UDim2.fromScale(CurrentLoadAmount / LoadAmount, 1)}):Play()
+end
+
+local function Load(Path, Name)
+    IncrementBar(Name)
     if IsStudio then
         local Ref = script
         for _, v in Path:gsub("%.lua", ""):split("/") do
@@ -160,7 +164,7 @@ local function Load(Path, Name)
         end
         return require(Ref)
     else
-        local Function = shared.TidalWaveDev and loadfile(`TidalWave/{Path}`) or DownloadFile(`https://raw.githubusercontent.com/fluidnarrator30/Tidal-Wave/refs/heads/main/{Path}`)
+        local Function = shared.TidalWaveDev and loadfile(`TidalWave/{Path}`) or loadstring(DownloadFile(`TidalWave/{Path}`), Name)
         if typeof(Function) == "function" then
             return Function()
         else
@@ -180,8 +184,9 @@ Load("Games/Universal.lua", "Universal")
 local BeforeModules = GetTableLength(TidalWave.Modules)
 local PlaceName
 if GameSupported then
+    IncrementBar(PlaceName)
     PlaceName = MarketplaceService:GetProductInfoAsync(game.PlaceId).Name
-    Load(`Games/{game.PlaceId}.lua`, PlaceName)
+    loadfile(`TidalWave/Games/{game.PlaceId}.lua`)
 end
 
 local NewModules = GetTableLength(TidalWave.Modules) - BeforeModules
