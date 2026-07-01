@@ -123,6 +123,19 @@ ProgressBarFill.BorderSizePixel = 0
 ProgressBarFill.BackgroundColor3 = White
 ProgressBarFill.Parent = ProgressBar
 
+local function DownloadFile(Path)
+	if not isfile(Path) then
+		local Success, Result = pcall(function()
+			return game:HttpGet('https://raw.githubusercontent.com/7GrandDadPGN/VapeV4ForRoblox/'..readfile('newvape/profiles/commit.txt')..'/'..select(1, path:gsub('newvape/', '')), true)
+		end)
+		if not Success or Result == '404: Not Found' then
+			Error(Result)
+		end
+		writefile(Path, Result)
+	end
+	return readfile(Path)
+end
+
 if not shared.TidalWaveDev then
     local Success, Result = pcall(function()
         return game:HttpGet(`https://github.com/fluidnarrator30/Tidal-Wave/blob/main/Games/{game.PlaceId}.lua`)
@@ -147,7 +160,7 @@ local function Load(Path, Name)
         end
         return require(Ref)
     else
-        local Function = shared.TidalWaveDev and loadfile(`TidalWave/{Path}`) or loadstring(game:HttpGet(`https://raw.githubusercontent.com/fluidnarrator30/Tidal-Wave/refs/heads/main/{Path}`), Name)
+        local Function = shared.TidalWaveDev and loadfile(`TidalWave/{Path}`) or DownloadFile(`https://raw.githubusercontent.com/fluidnarrator30/Tidal-Wave/refs/heads/main/{Path}`)
         if typeof(Function) == "function" then
             return Function()
         else
