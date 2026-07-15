@@ -52,6 +52,19 @@ local function GetTableLength(Tab)
     return Len
 end
 
+local function DownloadFile(Path, Function)
+	if not isfile(Path) then
+        local NewPath = Path:gsub("TidalWave/", "")
+		local Success, Result = pcall(function()
+			return game:HttpGet(`https://raw.githubusercontent.com/fluidnarrator30/Tidal-Wave/refs/heads/main/{NewPath}`, true)
+		end)
+        if Success and Result ~= "404: Not Found" then
+            writefile(Path, Result)
+        end
+	end
+    return (Function or readfile)(Path)
+end
+
 local TidalWave
 
 local function AddCorner(Obj, CornerRadius)
@@ -80,7 +93,7 @@ local ImageLabel = Instance.new("ImageLabel")
 ImageLabel.Size = UDim2.fromOffset(125, 72)
 ImageLabel.BackgroundTransparency = 1
 ImageLabel.Position = UDim2.fromOffset(87, 10)
-ImageLabel.Image = getcustomasset("TidalWave/Assets/TidalWaveAutoSpa.webp")
+ImageLabel.Image = DownloadFile('Assets/TidalWaveAutoSpa.webp', getcustomasset)
 ImageLabel.Parent = LoadingFrame
 
 local LoadingInfo = Instance.new("TextLabel")
@@ -117,19 +130,6 @@ local function Error(Msg, Name, Er)
     end
     LoadingScreen:Destroy()
     warn(`[TidalWave]: Failed to load '{Name}': {Er}`)
-end
-
-local function DownloadFile(Path, Function)
-	if not isfile(Path) then
-        local NewPath = Path:gsub("TidalWave/", "")
-		local Success, Result = pcall(function()
-			return game:HttpGet(`https://raw.githubusercontent.com/fluidnarrator30/Tidal-Wave/refs/heads/main/{NewPath}`, true)
-		end)
-        if Success and Result ~= "404: Not Found" then
-            writefile(Path, Result)
-        end
-	end
-    return (Function or readfile)(Path)
 end
 
 if not shared.TidalWaveDev then
