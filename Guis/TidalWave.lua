@@ -19,7 +19,7 @@ local Camera: Camera = workspace.CurrentCamera or workspace:FindFirstChildOfClas
 
 local IsStudio = RunService:IsStudio()
 
-local Lucide = IsStudio and require(script.Parent.Parent.Libraries.Lucide) or loadstring(game:HttpGet("https://raw.githubusercontent.com/deividcomsono/lucide-roblox-direct/refs/heads/main/source.lua"), "Lucide")()
+local Lucide = IsStudio and require(script.Parent.Parent.Libraries.Lucide) or loadstring(game:HttpGet("https://raw.githubusercontent.com/deividcomsono/lucide-roblox-direct/refs/heads/main/source.lua", true), "Lucide")()
 local loadstring = IsStudio and require(script.Parent.Parent.Libraries.Loadstring) or loadstring
 local queueonteleport = queueonteleport or queue_on_teleport or (syn and syn.queue_on_teleport) or (fluxus and fluxus.queue_on_teleport)
 local identifyexecutor = identifyexecutor
@@ -43,72 +43,94 @@ if IsStudio then
     end
 end
 
+local function Run(f)
+    f()
+end
+
 local function AddMaid(Obj)
-	Obj.Connections = {}
-	function Obj:Clean(Connection: Instance | (...any) -> (...any) | RBXScriptConnection | thread, ...: any)
-        local function RemoveCon()
+    Obj.Connections = {}
+    function Obj:Clean(Connection: RBXScriptConnection | thread | Instance | (...any) -> (...any) , ...: any)
+        local function Remove()
             local Index = table.find(Obj.Connections, Connection)
             if Index then
                 table.remove(Obj.Connections, Index)
             end
         end
 
-        local Tab
+        local Type = typeof(Connection)
 
-		if typeof(Connection) == "Instance" then
-            local Remove = function()
+        local Disconnect
+        local Connected
+
+        if Type == "Instance" then
+            Disconnect = function()
                 Connection:Destroy()
-                RemoveCon()
+                Remove()
             end
-
-            Tab = {
-                Disconnect = Remove,
-                Destroy = Remove,
-                Remove = Remove
-            }
-		elseif typeof(Connection) == "function" then
+            Connected = function()
+                return Connection and Connection.Parent ~= nil
+            end
+        elseif Type == "function" then
             local Args = {...}
-            local Remove = function()
+            Disconnect = function()
                 Connection(unpack(Args))
-                RemoveCon()
+                Remove()
             end
-            Tab = {
-                Disconnect = Remove,
-                Remove = Remove,
-                Destroy = Remove
-            }
-		elseif typeof(Connection) == "RBXScriptConnection" then
-            local Remove = function()
+            Connected = function()
+                return true
+            end
+        elseif Type == "RBXScriptConnection" then
+            Disconnect = function()
                 Connection:Disconnect()
-                RemoveCon()
+                Remove()
             end
-
-            Tab = {
-                Disconnect = Remove,
-                Remove = Remove,
-                Destroy = Remove
-            }
-		elseif typeof(Connection) == "thread" then
-            local Remove = function()
+            Connected = function()
+                return Connection and Connection.Connected
+            end
+        elseif Type == "thread" then
+            Disconnect = function()
                 pcall(task.cancel, Connection)
-                RemoveCon()
+                Remove()
             end
+            Connected = function()
+                return Connection and coroutine.status(Connection) ~= "dead"
+            end
+        end
 
-            Tab = {
-                Disconnect = Remove,
-                Remove = Remove,
-                Destroy = Remove
-            }
-		end
+        local Metatable = {
+            __index = function(_, i)
+                if i == 'Connected' then
+                    return Connected()
+                end
+            end
+        }
 
-        table.insert(Obj.Connections, Tab)
+        local Tab = {
+            Disconnect = Disconnect,
+            Destroy = Disconnect,
+            Remove = Disconnect,
+        }
+
+        setmetatable(Tab, Metatable)
+
+        Obj.Connections[#Obj.Connections + 1] = Tab
 
         return Tab
-	end
-end
+    end
 
-local function Run(f)
-    f()
+    function Obj:DisconnectAll()
+        for _, v in Obj.Connections do
+            v:Disconnect()
+        end
+    end
+
+    function Obj:RemoveDisconnected()
+        for i, v in Obj.Connections do
+            if not v.Connected then
+                table.remove(Obj.Connections, i)
+            end
+        end
+    end
 end
 
 local function rgbt(R, G, B, T)
@@ -144,7 +166,7 @@ local BuiltInThemes = {
             Button = rgbt(20, 20, 20),
             ButtonHover = rgbt(40, 40, 40),
             ButtonPress = rgbt(20, 20, 20),
-            Tooltip = rgbt(0, 0, 0, 0.2),
+            Tooltip = rgbt(0, 0, 0, 0.3),
             Notification = rgbt(0, 0, 0, 0.2),
         },
         Outline = {
@@ -170,6 +192,16 @@ local BuiltInThemes = {
     }
 }
 
+local function GetTableLength(Tab)
+	local Len = 0
+	for _ in Tab do
+		Len += 1
+	end
+	return Len
+end
+
+local LengthMetatable = {__len = GetTableLength}
+
 local Gui = {
 	Scale = true,
     Tooltip = true,
@@ -185,10 +217,10 @@ local Gui = {
     NotificationFillDirection = "Up",
 	Profiles = {},
     Friends = {},
-	Menus = {},
-	Modules = {},
-    Buttons = {},
-	Categories = {},
+	Menus = setmetatable({}, LengthMetatable),
+	Modules = setmetatable({}, LengthMetatable),
+    Buttons = setmetatable({}, LengthMetatable),
+	Categories = setmetatable({}, LengthMetatable),
     RainbowTable = {},
 	Fonts = {
 		Regular = {
@@ -213,7 +245,7 @@ AddMaid(Gui)
 
 local SearchMatches = {}
 local White = Color3.new(1, 1, 1)
-local Black = Color3.new()
+local Black = Color3.new(0, 0, 0)
 
 local function GetCurrentTheme()
     return Gui.Themes[Gui.Theme]
@@ -252,6 +284,10 @@ local function SetColor(Type, Color, Transparency)
     end
 end
 
+local function GetFont(Font)
+    return Gui.Fonts[Font].Font
+end
+
 local function ApplyColor(Obj, Properties)
     for i, v in Properties do
         local Color, Transparency = GetColor(i)
@@ -269,8 +305,7 @@ end
 local function AddRGB(Tab)
     table.insert(Gui.RainbowTable, Tab)
     if not Gui.RainbowRunning then
-        Gui.RainbowRunning = true
-        task.spawn(function()
+        Gui.RainbowRunning = Gui:Clean(task.spawn(function()
             while Gui.RainbowRunning do
                 for _, Color in Gui.RainbowTable do
                     local Hue = tick() * (Gui.RainbowSpeed * 0.2) % 1
@@ -278,7 +313,7 @@ local function AddRGB(Tab)
                 end
                 task.wait(1 / Gui.RainbowRefreshRate)
             end
-        end)
+        end))
     end
 end
 
@@ -287,7 +322,8 @@ local function RemoveRGB(Tab)
         if v == Tab then
             table.remove(Gui.RainbowTable, i)
             if #Gui.RainbowTable == 0 then
-                Gui.RainbowRunning = false
+                Gui.RainbowRunning:Disconnect()
+                Gui.RainbowRunning = 0
             end
             break
         end
@@ -318,6 +354,120 @@ local function AddHighlight(Obj, UseSecondaryColor)
 		TweenService:Create(Obj, Info2, {BackgroundColor3 = GetColor("Background/ButtonHover")}):Play()
 	end)
 end
+
+local function TweenEnabledBar(Bar, Enabled)
+    if Bar and Enabled ~= nil then
+        TweenService:Create(Bar, TweenInfo.new(0.2), {BackgroundColor3 = Enabled and GetColor('Main/EnabledBar') or GetColor('Main/DisabledBar')}):Play()
+    end
+end
+
+local Keys = {
+    ["MouseButton1"] = Enum.UserInputType.MouseButton1,
+    ["MouseButton2"] = Enum.UserInputType.MouseButton2,
+    ["MouseButton3"] = Enum.UserInputType.MouseButton3,
+    ["MouseWheel"] = Enum.UserInputType.MouseWheel,
+	["Unknown"] = Enum.KeyCode.Unknown,
+	["A"] = Enum.KeyCode.A,
+	["B"] = Enum.KeyCode.B,
+	["C"] = Enum.KeyCode.C,
+	["D"] = Enum.KeyCode.D,
+	["E"] = Enum.KeyCode.E,
+	["F"] = Enum.KeyCode.F,
+	["G"] = Enum.KeyCode.G,
+	["H"] = Enum.KeyCode.H,
+	["I"] = Enum.KeyCode.I,
+	["J"] = Enum.KeyCode.J,
+	["K"] = Enum.KeyCode.K,
+	["L"] = Enum.KeyCode.L,
+	["M"] = Enum.KeyCode.M,
+	["N"] = Enum.KeyCode.N,
+	["O"] = Enum.KeyCode.O,
+	["P"] = Enum.KeyCode.P,
+	["Q"] = Enum.KeyCode.Q,
+	["R"] = Enum.KeyCode.R,
+	["S"] = Enum.KeyCode.S,
+	["T"] = Enum.KeyCode.T,
+	["U"] = Enum.KeyCode.U,
+	["V"] = Enum.KeyCode.V,
+	["W"] = Enum.KeyCode.W,
+	["X"] = Enum.KeyCode.X,
+	["Y"] = Enum.KeyCode.Y,
+	["Z"] = Enum.KeyCode.Z,
+	["F1"] = Enum.KeyCode.F1,
+	["F2"] = Enum.KeyCode.F2,
+	["F3"] = Enum.KeyCode.F3,
+	["F4"] = Enum.KeyCode.F4,
+	["F5"] = Enum.KeyCode.F5,
+	["F6"] = Enum.KeyCode.F6,
+	["F7"] = Enum.KeyCode.F7,
+	["F8"] = Enum.KeyCode.F8,
+	["F9"] = Enum.KeyCode.F9,
+	["F10"] = Enum.KeyCode.F10,
+	["F11"] = Enum.KeyCode.F11,
+	["F12"] = Enum.KeyCode.F12,
+	["Backspace"] = Enum.KeyCode.Backspace,
+	["Tab"] = Enum.KeyCode.Tab,
+    ["Enter"] = Enum.KeyCode.Return,
+	["Escape"] = Enum.KeyCode.Escape,
+	["Space"] = Enum.KeyCode.Space,
+	["Quote"] = Enum.KeyCode.Quote,
+	["Comma"] = Enum.KeyCode.Comma,
+	["Minus"] = Enum.KeyCode.Minus,
+	["Period"] = Enum.KeyCode.Period,
+	["Slash"] = Enum.KeyCode.Slash,
+	["Zero"] = Enum.KeyCode.Zero,
+	["One"] = Enum.KeyCode.One,
+	["Two"] = Enum.KeyCode.Two,
+	["Three"] = Enum.KeyCode.Three,
+	["Four"] = Enum.KeyCode.Four,
+	["Five"] = Enum.KeyCode.Five,
+	["Six"] = Enum.KeyCode.Six,
+	["Seven"] = Enum.KeyCode.Seven,
+	["Eight"] = Enum.KeyCode.Eight,
+	["Nine"] = Enum.KeyCode.Nine,
+	["Semicolon"] = Enum.KeyCode.Semicolon,
+	["Equals"] = Enum.KeyCode.Equals,
+	["LeftBracket"] = Enum.KeyCode.LeftBracket,
+	["BackSlash"] = Enum.KeyCode.BackSlash,
+	["RightBracket"] = Enum.KeyCode.RightBracket,
+	["Backquote"] = Enum.KeyCode.Backquote,
+	["Delete"] = Enum.KeyCode.Delete,
+	["KeypadZero"] = Enum.KeyCode.KeypadZero,
+	["KeypadOne"] = Enum.KeyCode.KeypadOne,
+	["KeypadTwo"] = Enum.KeyCode.KeypadTwo,
+	["KeypadThree"] = Enum.KeyCode.KeypadThree,
+	["KeypadFour"] = Enum.KeyCode.KeypadFour,
+	["KeypadFive"] = Enum.KeyCode.KeypadFive,
+	["KeypadSix"] = Enum.KeyCode.KeypadSix,
+	["KeypadSeven"] = Enum.KeyCode.KeypadSeven,
+	["KeypadEight"] = Enum.KeyCode.KeypadEight,
+	["KeypadNine"] = Enum.KeyCode.KeypadNine,
+	["KeypadPeriod"] = Enum.KeyCode.KeypadPeriod,
+	["KeypadDivide"] = Enum.KeyCode.KeypadDivide,
+	["KeypadMultiply"] = Enum.KeyCode.KeypadMultiply,
+	["KeypadMinus"] = Enum.KeyCode.KeypadMinus,
+	["KeypadPlus"] = Enum.KeyCode.KeypadPlus,
+	["KeypadEnter"] = Enum.KeyCode.KeypadEnter,
+	["KeypadEquals"] = Enum.KeyCode.KeypadEquals,
+	["Up"] = Enum.KeyCode.Up,
+	["Down"] = Enum.KeyCode.Down,
+	["Right"] = Enum.KeyCode.Right,
+	["Left"] = Enum.KeyCode.Left,
+	["Insert"] = Enum.KeyCode.Insert,
+	["Home"] = Enum.KeyCode.Home,
+	["End"] = Enum.KeyCode.End,
+	["PageUp"] = Enum.KeyCode.PageUp,
+	["PageDown"] = Enum.KeyCode.PageDown,
+	["NumLock"] = Enum.KeyCode.NumLock,
+	["CapsLock"] = Enum.KeyCode.CapsLock,
+	["ScrollLock"] = Enum.KeyCode.ScrollLock,
+	["RightShift"] = Enum.KeyCode.RightShift,
+	["LeftShift"] = Enum.KeyCode.LeftShift,
+	["RightControl"] = Enum.KeyCode.RightControl,
+	["LeftControl"] = Enum.KeyCode.LeftControl,
+	["RightAlt"] = Enum.KeyCode.RightAlt,
+	["LeftAlt"] = Enum.KeyCode.LeftAlt,
+}
 
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = `TidalWave v{Gui.CurrentVersion}`
@@ -383,8 +533,8 @@ Tooltip.Name = "Tooltip"
 Tooltip.TextColor3 = GetColor("Text/Primary")
 Tooltip.BackgroundColor3 = GetColor("Background/Tooltip")
 Tooltip.BorderSizePixel = 0
-Tooltip.BackgroundTransparency = 0.2
-Tooltip.FontFace = Gui.Fonts.Regular.Font
+Tooltip.BackgroundTransparency = 0.3
+Tooltip.FontFace = GetFont('Regular')
 Tooltip.Size = UDim2.fromOffset(100, 24)
 Tooltip.TextSize = 16
 Tooltip.ZIndex = 3
@@ -397,7 +547,7 @@ AddCorner(Tooltip, UDim.new(0, 5))
 local TooltipUIStroke = Instance.new("UIStroke")
 TooltipUIStroke.Thickness = 1
 TooltipUIStroke.Color = GetColor("Outline/Tooltip")
-TooltipUIStroke.BorderStrokePosition = Enum.BorderStrokePosition.Center
+TooltipUIStroke.BorderStrokePosition = Enum.BorderStrokePosition.Inner
 TooltipUIStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 TooltipUIStroke.Parent = Tooltip
 
@@ -476,7 +626,7 @@ local SelectedTopBar
 local function CreateTopBarButton(Properties)
 	local Table = {}
 
-    local Size = math.max(GetTextSize(Properties.Name, 24, Gui.Fonts.Regular.Font, 200).X + 10, 80)
+    local Size = math.max(GetTextSize(Properties.Name, 24, GetFont('Regular'), 200).X + 10, 80)
 	local Button = Instance.new("TextButton")
 	Button.Text = Properties.Name
 	Button.Name = Properties.Name
@@ -487,7 +637,7 @@ local function CreateTopBarButton(Properties)
 	Button.BorderSizePixel = 0
 	Button.TextColor3 = GetColor("Text/Primary")
 	Button.AutoButtonColor = false
-	Button.FontFace = Gui.Fonts.Regular.Font
+	Button.FontFace = GetFont('Regular')
 	Button.TextSize = 24
 	Button.Parent = TopBar
 	AddCorner(Button, UDim.new(0, 9))
@@ -523,15 +673,11 @@ local function CreateTopBarButton(Properties)
 	return Table
 end
 
-function Gui:SetIcon(Obj, IconName)
+local function SetIcon(Obj, IconName)
 	local Icon = Lucide.GetAsset(IconName)
 	Obj.Image = Icon.Url
 	Obj.ImageRectOffset = Icon.ImageRectOffset
 	Obj.ImageRectSize = Icon.ImageRectSize
-end
-
-local function SetIcon(Obj, IconName)
-	Gui:SetIcon(Obj, IconName)
 end
 
 local function AddTooltip(Obj, Text)
@@ -548,9 +694,9 @@ local function AddTooltip(Obj, Text)
 
 		Obj.MouseEnter:Connect(function()
             if not Gui.Tooltip then return end
-            local Size = GetTextSize(Text, Tooltip.TextSize, Gui.Fonts.Regular.Font, Camera.ViewportSize.X * 0.5)
+            local Size = GetTextSize(Text, Tooltip.TextSize, GetFont('Regular'), Camera.ViewportSize.X * 0.5)
 			Tooltip.Text = Text
-			Tooltip.Size = UDim2.fromOffset(Size.X + 5, Size.Y + 10)
+			Tooltip.Size = UDim2.fromOffset(Size.X + 10, Size.Y + 10)
 			OnMouseMoved()
 			Tooltip.Visible = true
 		end)
@@ -562,89 +708,15 @@ local function AddTooltip(Obj, Text)
 	end
 end
 
-local function GetTableLength(Tab)
-	local Len = 0
-	for _ in Tab do
-		Len += 1
-	end
-	return Len
-end
-
-local GetFullName
-
-Run(function()
-    local function SpaceCheck(Name)
-        return Name:find(" ") or tonumber(Name:sub(1, 1))
-    end
-
-    local function DuplicateCheck(Obj)
-        local Count = 0
-
-        for _, Child in Obj.Parent:GetChildren() do
-            if Child.Name == Obj.Name then
-                Count += 1
-                if Count > 1 then
-                    return true
-                end
-            end
-        end
-
-        return false
-    end
-
-    local function GetObjFromDebugId(Parent, Id)
-        for _, Child in Parent:GetChildren() do
-            if Child:GetDebugId() == Id then
-                return Child
-            end
-        end
-    end
-
-    GetFullName = function(Obj)
-        if Obj == game then return "game" end
-        if Obj.Parent == game then return Obj.ClassName == "Workspace" and "workspace" or `game:GetService("{Obj.ClassName}")` end
-
-        local Parts = {}
-
-        while Obj.Parent ~= game do
-            local Name = Obj.Name
-
-            Name = SpaceCheck(Name) and `["{Name}"]` or `.{Name}`
-
-            table.insert(Parts, 1, {
-                Name = Name,
-                DebugId = DuplicateCheck(Obj) and Obj:GetDebugId() or nil
-            })
-
-            Obj = Obj.Parent
-        end
-
-        local Expression = Obj.ClassName == "Workspace" and "workspace" or `game:GetService("{Obj.ClassName}")`
-
-        for _, Part in Parts do
-            if Part.DebugId then
-                Expression = `GetObjFromDebugId({Expression}, "{Part.DebugId}")`
-            else
-                Expression ..= Part.Name
-            end
-        end
-
-        if Parts[1].DebugId or #table.freeze(table.clone(Parts)) > 0 then
-            for _, Part in Parts do
-                if Part.DebugId then
-                    return "local function GetObjFromDebugId(Parent, Id) for _, Child in Parent:GetChildren() do if Child:GetDebugId() == Id then return Child end end return nil end\n" .. Expression
-                end
-            end
-        end
-
-        return Expression
-    end
-end)
-
 local function LoopClean(Tab)
 	for i, v in Tab do
-		if typeof(v) == "table" then
+        local Type = typeof(v)
+		if Type == "table" then
 			LoopClean(v)
+        elseif Type == 'thread' then
+            pcall(task.cancel, v)
+        elseif Type == 'RBXScriptConnection' then
+            v:Disconnect()
 		end
 		Tab[i] = nil
 	end
@@ -705,7 +777,7 @@ Run(function()
 			local Right = Gui.NotificationHorizontalAlignment == "Right"
 			local Bottom = Gui.NotificationVerticalAlignment == "Bottom"
 			local FillDirectionUp = Gui.NotificationFillDirection == "Up"
-            local TextSize = math.max(GetTextSize(Properties.Text, 15, Gui.Fonts.Regular.Font, 1000).X + 60, 260)
+            local TextSize = math.max(GetTextSize(Properties.Text, 15, GetFont('Regular'), 1000).X + 60, 260)
             local BackgroundColor, BackgroundTransparency = GetColor("Background/Notification")
 
 			local Frame = Instance.new("Frame")
@@ -733,7 +805,7 @@ Run(function()
 			TitleShadow.BackgroundTransparency = 1
 			TitleShadow.TextColor3 = GetColor('Text/Shadow')
 			TitleShadow.TextSize = 17
-			TitleShadow.FontFace = Gui.Fonts.SemiBold.Font
+			TitleShadow.FontFace = GetFont('SemiBold')
 			TitleShadow.Text = Properties.Title and RemoveTags(Properties.Title) or "Tidal Wave"
             TitleShadow.TextXAlignment = Enum.TextXAlignment.Left
 			TitleShadow.Parent = Frame
@@ -763,7 +835,7 @@ Run(function()
 			TextShadow.BackgroundTransparency = 1
 			TextShadow.TextColor3 = GetColor('Text/Shadow')
 			TextShadow.TextSize = 15
-			TextShadow.FontFace = Gui.Fonts.Regular.Font
+			TextShadow.FontFace = GetFont('Regular')
 			TextShadow.Text = RemoveTags(Properties.Text)
             TextShadow.TextXAlignment = Enum.TextXAlignment.Left
             TextShadow.TextWrapped = true
@@ -821,115 +893,6 @@ local function NotifyPoopSploit(FunctionName: string)
 	})
 end
 
-local function CreateKeybindTemplate(Properties)
-	local KeybindFrame = Instance.new("Frame")
-	KeybindFrame.Name = `{Properties.Name}Keybind`
-	KeybindFrame.BackgroundTransparency = 1
-	KeybindFrame.Size = UDim2.new(1, -100, 0, 40)
-	KeybindFrame.LayoutOrder = Properties.LayoutOrder
-	KeybindFrame.Parent = Properties.Parent
-
-	local Background = Instance.new("Frame")
-	Background.Name = "Background"
-	Background.BackgroundColor3 = GetColor('Background/Button')
-	Background.BorderSizePixel = 0
-	Background.Size = UDim2.new(1, -45, 1, 0)
-	Background.Parent = KeybindFrame
-	AddCorner(Background, UDim.new(0, 7))
-
-	local KeybindName = Instance.new("TextLabel")
-	KeybindName.Name = "KeybindName"
-	KeybindName.BackgroundTransparency = 1
-	KeybindName.Size = UDim2.fromOffset(200, 40)
-	KeybindName.TextColor3 = GetColor('Text/Primary')
-	KeybindName.TextSize = 24
-	KeybindName.FontFace = Gui.Fonts.Regular.Font
-	KeybindName.Text = Properties.Text
-	KeybindName.TextXAlignment = Enum.TextXAlignment.Left
-	KeybindName.Parent = Background
-
-	local BindButton = Instance.new("TextButton")
-	BindButton.Name = "BindButton"
-	BindButton.BackgroundColor3 = GetColor('Background/Secondary')
-	BindButton.BorderSizePixel = 0
-	BindButton.Size = UDim2.fromOffset(200, 30)
-	BindButton.Position = UDim2.fromOffset(200, 5)
-	BindButton.TextColor3 = GetColor('Text/Primary')
-	BindButton.TextSize = 24
-	BindButton.FontFace = Gui.Fonts.Regular.Font
-	BindButton.Text = Properties.Keybind or "None"
-	BindButton.AutoButtonColor = false
-	BindButton.Parent = Background
-	AddCorner(BindButton, UDim.new(0, 7))
-	AddHighlight(BindButton, GetColor('Background/Secondary'))
-	AddTooltip(BindButton, "Click to bind")
-
-	local DeleteKeybind = Instance.new("TextButton")
-	DeleteKeybind.Name = "Delete"
-	DeleteKeybind.BackgroundColor3 = GetColor('Background/Button')
-	DeleteKeybind.Text = ""
-	DeleteKeybind.BorderSizePixel = 0
-	DeleteKeybind.Size = UDim2.fromOffset(40, 40)
-	DeleteKeybind.Position = UDim2.new(1, -40, 0, 0)
-	DeleteKeybind.AutoButtonColor = false
-	DeleteKeybind.Parent = KeybindFrame
-	AddCorner(DeleteKeybind, UDim.new(0, 7))
-	AddHighlight(DeleteKeybind)
-	AddTooltip(DeleteKeybind, "Click to delete keybind")
-
-	local DeleteKeybindImage = Instance.new("ImageLabel")
-	DeleteKeybindImage.Name = "Image"
-	DeleteKeybindImage.BackgroundTransparency = 1
-	DeleteKeybindImage.Size = UDim2.fromOffset(24, 24)
-	DeleteKeybindImage.Position = UDim2.fromOffset(8, 8)
-	SetIcon(DeleteKeybindImage, "x")
-	DeleteKeybindImage.Parent = DeleteKeybind
-
-	if Properties.Hold == nil or Properties.Hold == true then
-		local Hold = Instance.new("TextButton")
-		Hold.Name = "ToggleOnRelease"
-		Hold.BackgroundColor3 = GetColor('Background/Secondary')
-		Hold.BorderSizePixel = 0
-		Hold.Size = UDim2.fromOffset(140, 30)
-		Hold.Position = UDim2.fromOffset(410, 5)
-		Hold.TextColor3 = GetColor('Text/Primary')
-		Hold.TextSize = 24
-		Hold.FontFace = Gui.Fonts.Regular.Font
-		Hold.AutoButtonColor = false
-		Hold.Text = "Hold"
-		Hold.Parent = Background
-		AddCorner(Hold, UDim.new(0, 7))
-		AddHighlight(Hold, GetColor('Background/Secondary'))
-		AddTooltip(Hold, `Toggles off the module when releasing the keybind`)
-
-		local EnabledIndicator = Instance.new("Frame")
-		EnabledIndicator.Name = "Enabled"
-		EnabledIndicator.BackgroundColor3 = GetColor('Main/EnabledBar')
-		EnabledIndicator.Size = UDim2.fromOffset(2, 24)
-		EnabledIndicator.Position = UDim2.new(1, -8, 0, 3)
-		EnabledIndicator.BorderSizePixel = 0
-		EnabledIndicator.Parent = Hold
-
-		return {
-			KeybindFrame = KeybindFrame,
-			KeybindName = KeybindName,
-			BindButton = BindButton,
-			DeleteKeybind = DeleteKeybind,
-			Hold = Hold,
-			EnabledIndicator = EnabledIndicator,
-		}
-	else
-		BindButton.Position += UDim2.fromOffset(150, 0)
-	end
-
-	return {
-		KeybindFrame = KeybindFrame,
-		KeybindName = KeybindName,
-		BindButton = BindButton,
-		DeleteKeybind = DeleteKeybind,
-	}
-end
-
 local Templates; Templates = {
 	Button = function(Properties)
 		local Button = {
@@ -941,10 +904,10 @@ local Templates; Templates = {
 		TextButton.Name = `{Properties.Name}Button`
 		TextButton.BackgroundColor3 = GetColor('Background/Button')
 		TextButton.Size = UDim2.new(1, -100, 0, 40)
-		TextButton.LayoutOrder = GetTableLength(Properties.Module.Options)
+		TextButton.LayoutOrder = Properties.LayoutOrder
 		TextButton.TextXAlignment = Enum.TextXAlignment.Left
 		TextButton.TextSize = 24
-		TextButton.FontFace = Gui.Fonts.Regular.Font
+		TextButton.FontFace = GetFont('Regular')
 		TextButton.Text = ` {Properties.Name}`
 		TextButton.AutoButtonColor = false
 		TextButton.TextColor3 = GetColor('Text/Primary')
@@ -964,6 +927,160 @@ local Templates; Templates = {
 
 		return Button
 	end,
+    Keybind = function(Properties)
+        local Keybind = {
+            Keybind = Properties.Keybind or 'None',
+            Hold = if Properties.UseHold ~= nil then Properties.Hold or false else nil
+        }
+
+        local MainFrame = Instance.new("Frame")
+        MainFrame.Name = `{Properties.Name}Keybind`
+        MainFrame.BackgroundTransparency = 1
+        MainFrame.Size = UDim2.new(1, -100, 0, 40)
+        MainFrame.LayoutOrder = Properties.LayoutOrder
+        MainFrame.Parent = Properties.Parent
+
+        local Background = Instance.new("Frame")
+        Background.Name = "Background"
+        Background.BackgroundColor3 = GetColor('Background/Button')
+        Background.BorderSizePixel = 0
+        Background.Size = UDim2.new(1, -45, 1, 0)
+        Background.Parent = MainFrame
+        AddCorner(Background, UDim.new(0, 7))
+
+        local KeybindName = Instance.new("TextLabel")
+        KeybindName.Name = "KeybindName"
+        KeybindName.BackgroundTransparency = 1
+        KeybindName.Size = UDim2.fromOffset(200, 40)
+        KeybindName.TextColor3 = GetColor('Text/Primary')
+        KeybindName.TextSize = 24
+        KeybindName.FontFace = GetFont('Regular')
+        KeybindName.Text = Properties.Text and ` {Properties.Text}` or ` {Properties.Name} Keybind`
+        KeybindName.TextXAlignment = Enum.TextXAlignment.Left
+        KeybindName.Parent = Background
+
+        local BindButton = Instance.new("TextButton")
+        BindButton.Name = "BindButton"
+        BindButton.BackgroundColor3 = GetColor('Background/Secondary')
+        BindButton.BorderSizePixel = 0
+        BindButton.Size = UDim2.fromOffset(200, 30)
+        BindButton.Position = UDim2.fromOffset(200, 5)
+        BindButton.TextColor3 = GetColor('Text/Primary')
+        BindButton.TextSize = 24
+        BindButton.FontFace = GetFont('Regular')
+        BindButton.Text = Properties.Keybind or "None"
+        BindButton.AutoButtonColor = false
+        BindButton.Parent = Background
+        AddCorner(BindButton, UDim.new(0, 7))
+        AddHighlight(BindButton, GetColor('Background/Secondary'))
+        AddTooltip(BindButton, "Click to bind")
+
+        local DeleteKeybind = Instance.new("TextButton")
+        DeleteKeybind.Name = "Delete"
+        DeleteKeybind.BackgroundColor3 = GetColor('Background/Button')
+        DeleteKeybind.Text = ""
+        DeleteKeybind.BorderSizePixel = 0
+        DeleteKeybind.Size = UDim2.fromOffset(40, 40)
+        DeleteKeybind.Position = UDim2.new(1, -40, 0, 0)
+        DeleteKeybind.AutoButtonColor = false
+        DeleteKeybind.Parent = MainFrame
+        AddCorner(DeleteKeybind, UDim.new(0, 7))
+        AddHighlight(DeleteKeybind)
+        AddTooltip(DeleteKeybind, "Click to delete keybind")
+
+        local DeleteKeybindImage = Instance.new("ImageLabel")
+        DeleteKeybindImage.Name = "Image"
+        DeleteKeybindImage.BackgroundTransparency = 1
+        DeleteKeybindImage.Size = UDim2.fromOffset(24, 24)
+        DeleteKeybindImage.Position = UDim2.fromOffset(8, 8)
+        SetIcon(DeleteKeybindImage, "x")
+        DeleteKeybindImage.Parent = DeleteKeybind
+
+        local EnabledBar
+
+        if Properties.UseHold then
+            local Hold = Instance.new("TextButton")
+            Hold.Name = "ToggleOnRelease"
+            Hold.BackgroundColor3 = GetColor('Background/Secondary')
+            Hold.BorderSizePixel = 0
+            Hold.Size = UDim2.fromOffset(140, 30)
+            Hold.Position = UDim2.fromOffset(410, 5)
+            Hold.TextColor3 = GetColor('Text/Primary')
+            Hold.TextSize = 24
+            Hold.FontFace = GetFont('Regular')
+            Hold.AutoButtonColor = false
+            Hold.Text = "Hold"
+            Hold.Parent = Background
+            AddCorner(Hold, UDim.new(0, 7))
+            AddHighlight(Hold, GetColor('Background/Secondary'))
+            AddTooltip(Hold, 'Makes you able to hold the keybind rather then just pressing the keybind.')
+
+            EnabledBar = Instance.new("Frame")
+            EnabledBar.Name = "Enabled"
+            EnabledBar.BackgroundColor3 = Keybind.Hold and GetColor('Main/EnabledBar') or GetColor('Main/DisabledBar')
+            EnabledBar.Size = UDim2.fromOffset(2, 24)
+            EnabledBar.Position = UDim2.new(1, -8, 0, 3)
+            EnabledBar.BorderSizePixel = 0
+            EnabledBar.Parent = Hold
+        else
+            BindButton.Position += UDim2.fromOffset(150, 0)
+        end
+
+        BindButton.MouseButton1Click:Connect(function()
+			if Gui.Binding then
+				Gui.Binding = nil
+				BindButton.Text = Keybind.Keybind or "None"
+			else
+				BindButton.Text = "Press Key"
+                task.wait()
+				Gui.Binding = Keybind
+			end
+		end)
+
+		function Keybind:SetKeybind(Bind)
+            Bind = Bind or 'None'
+			self.Keybind = Bind
+			BindButton.Text = Bind
+            if Properties.Function then
+                Properties.Function(self.Keybind)
+            end
+		end
+
+        function Keybind:ToggleHold()
+            if self.Hold ~= nil and EnabledBar then
+                self.Hold = not self.Hold
+                TweenEnabledBar(EnabledBar, self.Hold)
+            end
+        end
+
+        local Name = Properties.Name:gsub(' ', '')
+
+		function Keybind:Save(Tab)
+			Tab[Name] = {
+                Keybind = self.Keybind,
+                Hold = self.Hold
+            }
+		end
+
+		function Keybind:Load(Tab)
+            if self.Keybind ~= Tab.Keybind then
+                self:SetKeybind(Tab.Keybind)
+            end
+            if self.Hold ~= nil and Tab.Hold ~= nil and self.Hold ~= Tab.Hold then
+                self:ToggleHold()
+            end
+		end
+
+		DeleteKeybind.MouseButton1Click:Connect(function()
+            Keybind:SetKeybind('None')
+        end)
+
+		Keybind.Object = MainFrame
+
+		Properties.Module.Keybinds[Name] = Keybind
+
+		return Keybind
+    end,
 	Toggle = function(Properties)
 		local Toggle = {
 			Enabled = false,
@@ -974,7 +1091,7 @@ local Templates; Templates = {
 		Frame.Name = `{Properties.Name}Toggle`
 		Frame.BackgroundTransparency = 1
 		Frame.Size = UDim2.new(1, -100, 0, 40)
-		Frame.LayoutOrder = GetTableLength(Properties.Module.Options)
+		Frame.LayoutOrder = Properties.LayoutOrder
 		Frame.Parent = Properties.Parent
 		local Button = Instance.new("TextButton")
         Button.Name = "Button"
@@ -983,7 +1100,7 @@ local Templates; Templates = {
 		Button.Size = UDim2.new(1, -45, 0, 40)
 		Button.TextColor3 = GetColor("Text/Primary")
 		Button.TextSize = 24
-		Button.FontFace = Gui.Fonts.Regular.Font
+		Button.FontFace = GetFont('Regular')
 		Button.Text = ` {Properties.Name}`
 		Button.AutoButtonColor = false
 		Button.Parent = Frame
@@ -992,13 +1109,13 @@ local Templates; Templates = {
 		AddHighlight(Button)
 		AddMaid(Toggle)
 
-		local EnabledIndicator = Instance.new("Frame")
-		EnabledIndicator.Name = "Enabled"
-		EnabledIndicator.BackgroundColor3 = GetColor("Main/DisabledBar")
-		EnabledIndicator.Size = UDim2.new(0, 2, 1, -6)
-		EnabledIndicator.Position = UDim2.new(1, -8, 0, 3)
-		EnabledIndicator.BorderSizePixel = 0
-		EnabledIndicator.Parent = Button
+		local EnabledBar = Instance.new("Frame")
+		EnabledBar.Name = "Enabled"
+		EnabledBar.BackgroundColor3 = GetColor("Main/DisabledBar")
+		EnabledBar.Size = UDim2.new(0, 2, 1, -6)
+		EnabledBar.Position = UDim2.new(1, -8, 0, 3)
+		EnabledBar.BorderSizePixel = 0
+		EnabledBar.Parent = Button
 
 		local ResetButton = Instance.new("TextButton")
 		ResetButton.Name = "Reset"
@@ -1024,7 +1141,7 @@ local Templates; Templates = {
 
 		function Toggle:Toggle()
 			Toggle.Enabled = not Toggle.Enabled
-			TweenService:Create(EnabledIndicator, Info, {BackgroundColor3 = Toggle.Enabled and GetColor("Main/EnabledBar") or GetColor("Main/DisabledBar")}):Play()
+            TweenEnabledBar(EnabledBar, Toggle.Enabled)
 			if Properties.Function then
 				task.spawn(Properties.Function, Toggle.Enabled)
 			elseif Properties.Enabled and Toggle.Enabled then
@@ -1081,7 +1198,7 @@ local Templates; Templates = {
 		Background.BackgroundColor3 = GetColor("Background/Button")
 		Background.BorderSizePixel = 0
 		Background.Size = UDim2.new(1, -100, 0, 40)
-		Background.LayoutOrder = GetTableLength(Properties.Module.Options)
+		Background.LayoutOrder = Properties.LayoutOrder
 		Background.Parent = Properties.Parent
 		AddCorner(Background, UDim.new(0, 7))
 
@@ -1089,7 +1206,7 @@ local Templates; Templates = {
 		TextLabel.BackgroundTransparency = 1
 		TextLabel.Size = UDim2.fromOffset(200, 40)
 		TextLabel.TextSize = 24
-		TextLabel.FontFace = Gui.Fonts.Regular.Font
+		TextLabel.FontFace = GetFont('Regular')
 		TextLabel.TextColor3 = GetColor("Text/Primary")
 		TextLabel.TextXAlignment = Enum.TextXAlignment.Left
 		TextLabel.Text = ` {Properties.Name}`
@@ -1104,7 +1221,7 @@ local Templates; Templates = {
 		TextBoxObject.PlaceholderText = Properties.PlaceholderText or ""
 		TextBoxObject.TextColor3 = GetColor("Text/Primary")
         TextBoxObject.PlaceholderColor3 = GetColor("Text/Placeholder")
-		TextBoxObject.FontFace = Gui.Fonts.Regular.Font
+		TextBoxObject.FontFace = GetFont('Regular')
 		TextBoxObject.TextSize = 24
 		TextBoxObject.Text = Properties.Text or ""
 		TextBoxObject.Parent = Background
@@ -1138,7 +1255,7 @@ local Templates; Templates = {
 		Frame.Name = `{Properties.Name}Slider`
 		Frame.BackgroundTransparency = 1
 		Frame.Size = UDim2.new(1, -100, 0, 40)
-		Frame.LayoutOrder = GetTableLength(Properties.Module.Options)
+		Frame.LayoutOrder = Properties.LayoutOrder
 		Frame.Parent = Properties.Parent
 
 		local Background = Instance.new("Frame")
@@ -1162,7 +1279,7 @@ local Templates; Templates = {
 		Input.Position = UDim2.fromOffset(200, 5)
 		SetInputText(Properties.Default)
 		Input.ClearTextOnFocus = false
-		Input.FontFace = Gui.Fonts.Regular.Font
+		Input.FontFace = GetFont('Regular')
 		Input.TextSize = 24
 		Input.ClipsDescendants = true
 		Input.Parent = Background
@@ -1172,7 +1289,7 @@ local Templates; Templates = {
 		TextLabel.BackgroundTransparency = 1
 		TextLabel.TextColor3 = GetColor("Text/Primary")
 		TextLabel.Size = UDim2.fromOffset(200, 40)
-		TextLabel.FontFace = Gui.Fonts.Regular.Font
+		TextLabel.FontFace = GetFont('Regular')
 		TextLabel.TextSize = 24
 		TextLabel.Text = ` {Properties.Name}`
 		TextLabel.TextXAlignment = Enum.TextXAlignment.Left
@@ -1322,6 +1439,9 @@ local Templates; Templates = {
 			local String = tostring(Number):gsub("%%", "")
 			local Val = tonumber(String)
 			if Val then
+                if Properties.Clamp then
+                    Val = math.clamp(Val, Properties.Min, Properties.Max)
+                end
                 local Pos = CalculatePositionFromValue(Val)
 				Handle.Position = UDim2.new(0, Pos, 0, -7)
                 LeftBar.Size = UDim2.fromOffset(Pos, 3)
@@ -1375,7 +1495,7 @@ local Templates; Templates = {
 		Frame.Name = `{Properties.Name}Dropdown`
 		Frame.BackgroundTransparency = 1
 		Frame.Size = UDim2.new(1, -100, 0, 40)
-		Frame.LayoutOrder = GetTableLength(Properties.Module.Options)
+		Frame.LayoutOrder = Properties.LayoutOrder
 		Frame.Parent = Properties.Parent
 
 		local Background = Instance.new("Frame")
@@ -1390,7 +1510,7 @@ local Templates; Templates = {
 		TextLabel.TextColor3 = GetColor('Text/Primary')
 		TextLabel.BackgroundTransparency = 1
 		TextLabel.Size = UDim2.new(0, 200, 1, 0)
-		TextLabel.FontFace = Gui.Fonts.Regular.Font
+		TextLabel.FontFace = GetFont('Regular')
 		TextLabel.TextSize = 24
 		TextLabel.TextXAlignment = Enum.TextXAlignment.Left
 		TextLabel.Text = ` {Properties.Name}`
@@ -1414,7 +1534,7 @@ local Templates; Templates = {
 		TopBarLabel.Text = `   {Properties.List[1] or "None"}`
 		TopBarLabel.TextSize = 24
 		TopBarLabel.TextColor3 = GetColor('Text/Primary')
-		TopBarLabel.FontFace = Gui.Fonts.Regular.Font
+		TopBarLabel.FontFace = GetFont('Regular')
 		TopBarLabel.TextXAlignment = Enum.TextXAlignment.Left
 		TopBarLabel.Parent = TopBar
         AddTooltip(TopBarLabel, Properties.Info or Properties.Tooltip)
@@ -1529,7 +1649,7 @@ local Templates; Templates = {
 						Button.Size = UDim2.fromOffset(220, 30)
 						Button.BackgroundColor3 = GetColor('Background/Button')
 						Button.TextColor3 = GetColor('Text/Primary')
-						Button.FontFace = Gui.Fonts.Regular.Font
+						Button.FontFace = GetFont('Regular')
 						Button.TextSize = 20
 						Button.Text = `  {v}`
 						Button.LayoutOrder = i
@@ -1602,8 +1722,8 @@ local Templates; Templates = {
 	end,
 	TextList = function(Properties)
 		local TextList = {
-			List = Properties.Default or {},
-            Enabled = Properties.Default or {},
+			List = setmetatable(Properties.List or Properties.Default or {}, LengthMetatable),
+            Enabled = setmetatable(Properties.Enabled or Properties.List or Properties.Default or {}, LengthMetatable),
 			Visible = if Properties.Visible ~= nil then Properties.Visible else true,
             Type = "TextList"
 		}
@@ -1612,7 +1732,7 @@ local Templates; Templates = {
 		Frame.Name = `{Properties.Name}TextList`
 		Frame.BackgroundTransparency = 1
 		Frame.Size = UDim2.new(1, -100, 0, 40)
-		Frame.LayoutOrder = GetTableLength(Properties.Module.Options)
+		Frame.LayoutOrder = Properties.LayoutOrder
 		Frame.Parent = Properties.Parent
 
 		local Background = Instance.new("Frame")
@@ -1627,7 +1747,7 @@ local Templates; Templates = {
 		TextLabel.TextColor3 = GetColor('Text/Primary')
 		TextLabel.BackgroundTransparency = 1
 		TextLabel.Size = UDim2.new(0, 200, 1, 0)
-		TextLabel.FontFace = Gui.Fonts.Regular.Font
+		TextLabel.FontFace = GetFont('Regular')
 		TextLabel.TextSize = 24
 		TextLabel.TextXAlignment = Enum.TextXAlignment.Left
 		TextLabel.Text = ` {Properties.Name}`
@@ -1652,7 +1772,7 @@ local Templates; Templates = {
 		Selected.Text = "   Open to add entry"
 		Selected.TextSize = 24
 		Selected.TextColor3 = GetColor('Text/Primary')
-		Selected.FontFace = Gui.Fonts.Regular.Font
+		Selected.FontFace = GetFont('Regular')
 		Selected.TextXAlignment = Enum.TextXAlignment.Left
 		Selected.Parent = TopBar
 		AddCorner(Selected, UDim.new(0, 7))
@@ -1784,7 +1904,6 @@ local Templates; Templates = {
         end
 
         local function Create(Val)
-            Add(Val)
             if not table.find(TextList.List, Val) then
                 table.insert(TextList.List, Val)
             end
@@ -1799,12 +1918,12 @@ local Templates; Templates = {
         end
 
 		local function CreateButton(Properties)
-            local Enabled = if Properties.Enabled ~= nil then Properties.Enabled else true
+            local Enabled = Properties.Enabled == true
 			local Button = Instance.new("TextButton")
 			Button.Size = UDim2.fromOffset(220, 30)
 			Button.BackgroundColor3 = GetColor('Background/Button')
 			Button.TextColor3 = GetColor('Text/Primary')
-			Button.FontFace = Gui.Fonts.Regular.Font
+			Button.FontFace = GetFont('Regular')
 			Button.TextSize = 20
 			Button.Text = `  {Properties.Name}`
 			Button.LayoutOrder = Properties.LayoutOrder or 0
@@ -1816,14 +1935,14 @@ local Templates; Templates = {
 			AddCorner(Button, UDim.new(0, 7))
             AddHighlight(Button)
 
-            local EnabledIndicator = Instance.new("Frame")
-            EnabledIndicator.Name = "Enabled"
-            EnabledIndicator.BackgroundColor3 = Enabled and GetColor('Main/EnabledBar') or GetColor('Main/DisabledBar')
-            EnabledIndicator.Size = UDim2.new(0, 2, 1, -6)
-            EnabledIndicator.Position = UDim2.new(1, -8, 0, 3)
-            EnabledIndicator.BorderSizePixel = 0
-            EnabledIndicator.ZIndex = 2
-            EnabledIndicator.Parent = Button
+            local EnabledBar = Instance.new("Frame")
+            EnabledBar.Name = "Enabled"
+            EnabledBar.BackgroundColor3 = Enabled and GetColor('Main/EnabledBar') or GetColor('Main/DisabledBar')
+            EnabledBar.Size = UDim2.new(0, 2, 1, -6)
+            EnabledBar.Position = UDim2.new(1, -8, 0, 3)
+            EnabledBar.BorderSizePixel = 0
+            EnabledBar.ZIndex = 2
+            EnabledBar.Parent = Button
 
 			local DeleteButton = Instance.new("TextButton")
 			DeleteButton.Name = "Delete"
@@ -1856,7 +1975,7 @@ local Templates; Templates = {
 			RenameTextBox.Position = UDim2.fromOffset(10, 0)
 			RenameTextBox.TextSize = 20
 			RenameTextBox.TextColor3 = GetColor('Text/Primary')
-			RenameTextBox.FontFace = Gui.Fonts.Regular.Font
+			RenameTextBox.FontFace = GetFont('Regular')
 			RenameTextBox.ClearTextOnFocus = false
 			RenameTextBox.TextXAlignment = Enum.TextXAlignment.Left
 			RenameTextBox.Visible = false
@@ -1874,6 +1993,9 @@ local Templates; Templates = {
 					local OldName, NewName = Properties.Name, RenameTextBox.Text
                     Delete(OldName)
                     Create(NewName)
+                    if Enabled then
+                        Add(NewName)
+                    end
 					RenameTextBox.Visible = false
 					Button.Text = `  {NewName}`
 					Button.TextTransparency = 0
@@ -1883,8 +2005,6 @@ local Templates; Templates = {
 
 			if Properties.New then
 				Select()
-            else
-                Create(Properties.Name)
 			end
 
 			DeleteButton.MouseButton1Click:Connect(function()
@@ -1906,7 +2026,7 @@ local Templates; Templates = {
 				else
                     LastClick = os.clock()
                     Enabled = not Enabled
-                    TweenService:Create(EnabledIndicator, Info, {BackgroundColor3 = Enabled and GetColor('Main/EnabledBar') or GetColor('Main/DisabledBar')}):Play()
+                    TweenEnabledBar(EnabledBar, Enabled)
                     if Enabled then
                         TextList:Add(Properties.Name)
                     else
@@ -1921,7 +2041,7 @@ local Templates; Templates = {
 		PlusButton.MouseButton1Click:Connect(function()
 			CreateButton({
 				Name = "new",
-				LayoutOrder = GetTableLength(TextList.List) + 1,
+				LayoutOrder = #TextList.List + 1,
 				New = true,
                 Enabled = true
 			})
@@ -1929,7 +2049,10 @@ local Templates; Templates = {
 
         function TextList:Find(Val)
             local Index = table.find(TextList.Enabled, Val)
-            return Index and TextList.Enabled[Index] or nil
+            if Index and TextList.Enabled[Index] then
+                return TextList.Enabled[Index]
+            end
+            return nil
         end
 
 		function TextList:Add(Val)
@@ -1963,7 +2086,7 @@ local Templates; Templates = {
 						CreateButton({
 							Name = v,
 							LayoutOrder = i,
-                            Enabled = table.find(TextList.Enabled, v) ~= nil
+                            Enabled = TextList:Find(v) ~= nil
 						})
 					end
 				end
@@ -2132,7 +2255,7 @@ local Templates; Templates = {
 		NameLabel.Position = UDim2.fromOffset(10, 10)
 		NameLabel.TextColor3 = GetColor('Text/Primary')
 		NameLabel.TextSize = 24
-		NameLabel.FontFace = Gui.Fonts.Regular.Font
+		NameLabel.FontFace = GetFont('Regular')
 		NameLabel.Text = Properties.Name
 		NameLabel.Parent = Background
 
@@ -2143,7 +2266,7 @@ local Templates; Templates = {
 		RGBLabel.Position = UDim2.fromOffset(10, 45)
 		RGBLabel.TextColor3 = GetColor('Text/Primary')
 		RGBLabel.TextSize = 24
-		RGBLabel.FontFace = Gui.Fonts.Regular.Font
+		RGBLabel.FontFace = GetFont('Regular')
 		RGBLabel.Text = "RGB:"
 		RGBLabel.Parent = Background
 
@@ -2155,7 +2278,7 @@ local Templates; Templates = {
 		RGBInput.Position = UDim2.fromOffset(90, 45)
 		RGBInput.TextColor3 = GetColor('Text/Primary')
 		RGBInput.TextSize = 24
-		RGBInput.FontFace = Gui.Fonts.Regular.Font
+		RGBInput.FontFace = GetFont('Regular')
 		RGBInput.Text = `{math.floor(ColorPicker.Color.R * 255)}, {math.floor(ColorPicker.Color.G * 255)}, {math.floor(ColorPicker.Color.B * 255)}`
 		RGBInput.ClearTextOnFocus = false
 		RGBInput.Parent = Background
@@ -2170,7 +2293,7 @@ local Templates; Templates = {
 		HSVLabel.Position = UDim2.fromOffset(10, 80)
 		HSVLabel.TextColor3 = GetColor('Text/Primary')
 		HSVLabel.TextSize = 24
-		HSVLabel.FontFace = Gui.Fonts.Regular.Font
+		HSVLabel.FontFace = GetFont('Regular')
 		HSVLabel.Text = "HSV:"
 		HSVLabel.Parent = Background
 
@@ -2182,7 +2305,7 @@ local Templates; Templates = {
 		HSVInput.Position = UDim2.fromOffset(90, 80)
 		HSVInput.TextColor3 = GetColor('Text/Primary')
 		HSVInput.TextSize = 24
-		HSVInput.FontFace = Gui.Fonts.Regular.Font
+		HSVInput.FontFace = GetFont('Regular')
 		HSVInput.Text = `{math.floor(Hue * 255)}, {math.floor(Saturation * 255)}, {math.floor(Value * 255)}`
 		HSVInput.ClearTextOnFocus = false
 		HSVInput.Parent = Background
@@ -2197,7 +2320,7 @@ local Templates; Templates = {
 		HexLabel.Position = UDim2.fromOffset(10, 115)
 		HexLabel.TextColor3 = GetColor('Text/Primary')
 		HexLabel.TextSize = 24
-		HexLabel.FontFace = Gui.Fonts.Regular.Font
+		HexLabel.FontFace = GetFont('Regular')
 		HexLabel.Text = "Hex:"
 		HexLabel.Parent = Background
 
@@ -2209,7 +2332,7 @@ local Templates; Templates = {
 		HexInput.Position = UDim2.fromOffset(90, 115)
 		HexInput.TextColor3 = GetColor('Text/Primary')
 		HexInput.TextSize = 24
-		HexInput.FontFace = Gui.Fonts.Regular.Font
+		HexInput.FontFace = GetFont('Regular')
 		HexInput.Text = `#{Hex}`
 		HexInput.ClearTextOnFocus = false
 		HexInput.Parent = Background
@@ -2380,7 +2503,7 @@ local Templates; Templates = {
 		Frame.Name = `{Properties.Name}ColorPicker`
 		Frame.BackgroundTransparency = 1
 		Frame.Size = UDim2.new(1, -100, 0, 40)
-		Frame.LayoutOrder = GetTableLength(Properties.Module.Options)
+		Frame.LayoutOrder = Properties.LayoutOrder
 		Frame.Parent = Properties.Parent
 
 		local Background = Instance.new("Frame")
@@ -2411,14 +2534,14 @@ local Templates; Templates = {
 		SetIcon(ResetButtonImage, "rotate-cw")
 		ResetButtonImage.Parent = ResetButton
 
-        local TextSize = GetTextSize(Properties.Name, 24, Gui.Fonts.Regular.Font, 1000)
+        local TextSize = GetTextSize(Properties.Name, 24, GetFont('Regular'), 1000)
         
         local NameLabel = Instance.new("TextLabel")
         NameLabel.Name = "NameLabel"
         NameLabel.Position = UDim2.fromOffset(5, 0)
         NameLabel.Size = UDim2.fromOffset(TextSize.X + 5, 40)
         NameLabel.BackgroundTransparency = 1
-        NameLabel.FontFace = Gui.Fonts.Regular.Font
+        NameLabel.FontFace = GetFont('Regular')
         NameLabel.TextSize = 24
         NameLabel.TextColor3 = GetColor("Text/Primary")
         NameLabel.Text = Properties.Name
@@ -2439,7 +2562,7 @@ local Templates; Templates = {
         RGBInput.BackgroundTransparency = 1
         RGBInput.Position = UDim2.fromOffset(4, 0)
         RGBInput.Size = UDim2.fromOffset(130, 32)
-        RGBInput.FontFace = Gui.Fonts.Regular.Font
+        RGBInput.FontFace = GetFont('Regular')
         RGBInput.TextColor3 = GetColor("Text/Primary")
         RGBInput.TextSize = 24
         RGBInput.PlaceholderColor3 = GetColor("Text/Placeholder")
@@ -2600,7 +2723,7 @@ local Templates; Templates = {
             Label.BackgroundTransparency = 1
             Label.Size = UDim2.new(0, 20, 1, 0)
             Label.Position = UDim2.fromOffset(5, 0)
-            Label.FontFace = Gui.Fonts.Regular.Font
+            Label.FontFace = GetFont('Regular')
             Label.TextSize = 24
             Label.TextColor3 = GetColor("Text/Primary")
             Label.Text = SliderProperties.Text
@@ -2615,7 +2738,7 @@ local Templates; Templates = {
             Input.ClearTextOnFocus = false
             Input.Position = UDim2.fromOffset(30, 0)
             Input.Size = UDim2.new(0, 80, 1, 0)
-            Input.FontFace = Gui.Fonts.Regular.Font
+            Input.FontFace = GetFont('Regular')
             Input.TextSize = 24
             Input.TextColor3 = GetColor("Text/Primary")
             Input.ZIndex = 2
@@ -2910,9 +3033,9 @@ local ModulesTopBar, MenuOptionsMenu
 
 function Gui:CreateMenu(Properties)
 	local Menu = {
-		Options = {},
-        Buttons = {},
-		Keybinds = {},
+		Options = setmetatable({}, LengthMetatable),
+        Buttons = setmetatable({}, LengthMetatable),
+		Keybinds = setmetatable({}, LengthMetatable),
 	}
 
 	local TopBar = Instance.new("TextButton")
@@ -2937,7 +3060,7 @@ function Gui:CreateMenu(Properties)
     NameLabel.BackgroundTransparency = 1
     NameLabel.Text = `  {Properties.Name}`
     NameLabel.TextSize = 32
-    NameLabel.FontFace = Gui.Fonts.SemiBold.Font
+    NameLabel.FontFace = GetFont('SemiBold')
     NameLabel.TextColor3 = GetColor('Text/Primary')
     NameLabel.Parent = TopBar
 
@@ -3061,9 +3184,10 @@ function Gui:CreateMenu(Properties)
     if Properties.CanCreateOptions == nil or Properties.CanCreateOptions == true then
         function Menu:CreateOption(Properties)
             Properties.Parent = ScrollingFrame
+            Properties.LayoutOrder = #Menu.Options + #Menu.Keybinds
             Properties.Module = Menu
             local Toggle = Templates.Toggle(Properties)
-            Toggle.Options = {}
+            Toggle.Options = setmetatable({}, LengthMetatable)
 
             Toggle.Object.Button.MouseButton2Click:Connect(function()
                 MenuOptionsMenu.Object.NameLabel.Text = Properties.Name
@@ -3077,8 +3201,10 @@ function Gui:CreateMenu(Properties)
             end)
 
             for i, v in Templates do
+                if i == 'Keybind' then continue end
                 Toggle[`Create{i}`] = function(_, Properties)
                     Properties.Parent = MenuOptionsMenu.Object.ScrollingFrame
+                    Properties.LayoutOrder = #Toggle.Options
                     Properties.Module = Toggle
                     local Obj = v(Properties)
                     MenuOptionsMenu.Options[Properties.Name:gsub(" ", "")] = Obj
@@ -3095,58 +3221,11 @@ function Gui:CreateMenu(Properties)
     for i, v in Templates do
         Menu[`Create{i}`] = function(_, Properties)
             Properties.Parent = ScrollingFrame
+            Properties.LayoutOrder = #Menu.Options + #Menu.Keybinds
             Properties.Module = Menu
             return v(Properties)
         end
     end
-
-	function Menu:CreateKeybind(Properties)
-		local Keybind = {
-			Keybind = Properties.Default or Properties.Keybind or "None",
-            Type = "Keybind"
-		}
-		local KeybindTemplate = CreateKeybindTemplate({
-			LayoutOrder = GetTableLength(Menu.Options) + GetTableLength(Menu.Keybinds),
-			Name = Properties.Name,
-			Text = Properties.Text or ` {Properties.Name} Keybind`,
-			Hold = false,
-			Keybind = Properties.Default,
-			Parent = ScrollingFrame,
-		})
-
-		KeybindTemplate.BindButton.MouseButton1Click:Connect(function()
-			if Gui.Binding then
-				Gui.Binding = nil
-				KeybindTemplate.BindButton.Text = Keybind.Keybind or "None"
-			else
-				KeybindTemplate.BindButton.Text = "Press Key"
-				Gui.Binding = Keybind
-			end
-		end)
-
-		function Keybind:SetKeybind(Bind)
-			Keybind.Keybind = Bind or "None"
-			KeybindTemplate.BindButton.Text = Bind or "None"
-		end
-
-		function Keybind:Save(Tab)
-			Tab[Properties.Name:gsub(" ", "")] = Keybind.Keybind or "None"
-		end
-
-		function Keybind:Load(Bind)
-			if Keybind.Keybind ~= Bind then
-				Keybind:SetKeybind(Bind)
-			end
-		end
-
-		KeybindTemplate.DeleteKeybind.MouseButton1Click:Connect(Keybind.SetKeybind)
-
-		Keybind.Object = KeybindTemplate.KeybindFrame
-
-		Menu.Keybinds[Properties.Name:gsub(" ", "")] = Keybind
-
-		return Keybind
-	end
 
 	Menu.Object = TopBar
 
@@ -3182,7 +3261,7 @@ function Gui:CreateModuleList()
 		BarRainbowSaturation = 1,
 		BarRainbowValue = 1,
 	}
-    local StartSize = UDim2.fromOffset(math.max(GetTextSize(ModuleList.Text, 24, Gui.Fonts.Bold.Font, 1000).X, 300), 32)
+    local StartSize = UDim2.fromOffset(math.max(GetTextSize(ModuleList.Text, 24, GetFont('Bold'), 1000).X, 300), 32)
 	local TopBar = Instance.new("ImageButton")
 	TopBar.Name = "ModuleList"
 	TopBar.Size = StartSize
@@ -3199,10 +3278,10 @@ function Gui:CreateModuleList()
 	WatermarkShadow.Name = "Watermark"
 	WatermarkShadow.Size = StartSize
 	WatermarkShadow.BackgroundTransparency = 1
-	WatermarkShadow.Text = RemoveTags(ModuleList.Text) .. " "
+	WatermarkShadow.Text = RemoveTags(ModuleList.Text)..' '
 	WatermarkShadow.TextColor3 = GetColor('Text/Shadow')
 	WatermarkShadow.TextSize = 24
-	WatermarkShadow.FontFace = Gui.Fonts.Bold.Font
+	WatermarkShadow.FontFace = GetFont('Bold')
 	WatermarkShadow.RichText = true
 	WatermarkShadow.TextXAlignment = Enum.TextXAlignment.Right
 	WatermarkShadow.Parent = TopBar
@@ -3210,7 +3289,7 @@ function Gui:CreateModuleList()
 	local Watermark = WatermarkShadow:Clone()
 	Watermark.RichText = true
 	Watermark.TextColor3 = GetColor('Text/Primary')
-	Watermark.Text = ModuleList.Text .. " "
+	Watermark.Text = ModuleList.Text..' '
 	Watermark.Position = UDim2.fromOffset(-1, -1)
 	Watermark.Parent = WatermarkShadow
 
@@ -3240,7 +3319,7 @@ function Gui:CreateModuleList()
 	local function Sort()
 		if ModuleList.Sorting == "Length" then
 			table.sort(Modules, function(a, b)
-				return GetTextSize(a.Text, 16, Gui.Fonts.SemiBold.Font, Children.Size.X.Offset).X > GetTextSize(b.Text, 16, Gui.Fonts.SemiBold.Font, Children.Size.X.Offset).X
+				return GetTextSize(a.Text, 16, GetFont('SemiBold'), Children.Size.X.Offset).X > GetTextSize(b.Text, 16, GetFont('SemiBold'), Children.Size.X.Offset).X
 			end)
 		elseif ModuleList.Sorting == "Alphabetical" then
 			table.sort(Modules, function(a, b)
@@ -3297,7 +3376,7 @@ function Gui:CreateModuleList()
 				UpdateYPositions()
 			end
 		else
-            local TextSize = GetTextSize(Module, 16, Gui.Fonts.SemiBold.Font, Children.Size.X.Offset)
+            local TextSize = GetTextSize(Module, 16, GetFont('SemiBold'), Children.Size.X.Offset)
 			local Frame = Instance.new("Frame")
 			table.insert(Modules, {
 				Frame = Frame,
@@ -3318,7 +3397,7 @@ function Gui:CreateModuleList()
 			TextShadow.BackgroundTransparency = ModuleList.BackgroundEnabled and ModuleList.BackgroundTransparency or 1
 			TextShadow.BorderSizePixel = 0
 			TextShadow.TextColor3 = GetColor('Text/Shadow')
-			TextShadow.FontFace = Gui.Fonts.SemiBold.Font
+			TextShadow.FontFace = GetFont('SemiBold')
 			TextShadow.TextSize = 16
 			TextShadow.Text = Module
 			TextShadow.Parent = Frame
@@ -3381,15 +3460,16 @@ function Gui:CreateModuleList()
 	function ModuleList:SetWatermarkText(Text)
 		if typeof(Text) ~= "string" then return end
 		ModuleList.Text = Text
-		local TextSize = UDim2.fromOffset(math.max(GetTextSize(Text, 24, Gui.Fonts.Bold.Font, 1000).X + 10, 300), 32)
+		local TextSize = UDim2.fromOffset(math.max(GetTextSize(Text, 24, GetFont('Bold'), 1000).X + 10, 300), 32)
 		ModuleList.Size = TextSize
 		WatermarkShadow.Size = TextSize
 		Watermark.Size = TextSize
+        Text = ModuleList.Alignment == 'Right' and Text..' ' or ' '..Text
 		if ModuleList.TextShadow then
-			WatermarkShadow.Text = `{ModuleList.Alignment == "Left" and " " or ""}{RemoveTags(Text)}{ModuleList.Alignment == "Right" and " " or ""}`
-			Watermark.Text = `{ModuleList.Alignment == "Left" and " " or ""}{Text}{ModuleList.Alignment == "Right" and " " or ""}`
+			WatermarkShadow.Text = RemoveTags(Text)
+			Watermark.Text = Text
 		else
-			WatermarkShadow.Text = `{ModuleList.Alignment == "Left" and " " or ""}{Text}{ModuleList.Alignment == "Right" and " " or ""}`
+			WatermarkShadow.Text = Text
 		end
 	end
 
@@ -3420,14 +3500,15 @@ function Gui:CreateModuleList()
 		UpdateYPositions(true)
 	end
 
-	function ModuleList:SetAlignment(Alignment: "Left" | "Right")
+	function ModuleList:SetAlignment(Alignment)
 		if Alignment ~= "Left" and Alignment ~= "Right" then return end
 		ModuleList.Alignment = Alignment
-        WatermarkShadow.TextXAlignment = Enum.TextXAlignment:FromName(Alignment) or Enum.TextXAlignment.Right
+        WatermarkShadow.TextXAlignment = Enum.TextXAlignment[Alignment]
+        Watermark.TextXAlignment = WatermarkShadow.TextXAlignment
 		for i, v in Modules do
 			v.Frame.Position = UDim2.fromOffset(Alignment == "Right" and TopBar.Size.X.Offset or 0, (20 + ModuleList.Padding) * (i - 1))
 			v.Frame.AnchorPoint = Alignment == "Right" and Vector2.new(1, 0) or Vector2.new(0, 0)
-			v.Frame.Bar.Position = UDim2.new(Alignment == "Right" and 1 or 0, Alignment == "Right" and -2 or 0, 0)
+			v.Frame.Bar.Position = UDim2.fromScale(Alignment == "Right" and 1 or 0, 0)
 		end
 	end
 
@@ -3503,7 +3584,7 @@ function Gui:CreateModuleList()
 		end
 		if Enabled then
 			local Alpha = 0
-			RainbowCon = RunService.RenderStepped:Connect(function(Delta)
+			RainbowCon = RunService.PreRender:Connect(function(Delta)
 				if #Modules == 0 then return end
 
 				Alpha += Delta * (ModuleList.RainbowSpeed / 5)
@@ -3595,8 +3676,13 @@ local ModuleList = Gui:CreateModuleList()
 local CategoryArray = {}
 
 function Gui:RemoveModule(Module)
-	if Gui.Modules and Gui.Modules[Module] and Gui.Modules[Module].Object then
-		Gui.Modules[Module].Object:Destroy()
+	if Gui.Modules and Gui.Modules[Module] then
+        if Gui.Modules[Module].Enabled then
+            Gui.Modules[Module]:Toggle(true)
+        end
+        if Gui.Modules[Module].Object then
+            Gui.Modules[Module].Object:Destroy()
+        end
 		LoopClean(Gui.Modules[Module])
 		Gui.Modules[Module] = nil
 	end
@@ -3632,7 +3718,7 @@ function Gui:CreateCategory(Properties)
 		Expanded = true
 	}
 
-	local Index = GetTableLength(Gui.Categories)
+	local Index = #Gui.Categories
 	local Rand = Random.new(Index)
 	local ClosedPos = UDim2.fromScale(Rand:NextNumber(-1, 1), Rand:NextInteger(0, 1) == 0 and -1 or 1)
 
@@ -3654,7 +3740,7 @@ function Gui:CreateCategory(Properties)
     NameLabel.Name = "NameLabel"
     NameLabel.Text = `   {Properties.Name}`
 	NameLabel.TextColor3 = GetColor('Text/Primary')
-	NameLabel.FontFace = Gui.Fonts.SemiBold.Font
+	NameLabel.FontFace = GetFont('SemiBold')
 	NameLabel.TextXAlignment = Enum.TextXAlignment.Left
 	NameLabel.TextSize = 20
 	NameLabel.BackgroundTransparency = 1
@@ -3723,11 +3809,14 @@ function Gui:CreateCategory(Properties)
 		ScrollingFrame.CanvasSize = UDim2.new(1, 0, 0, GetHeight(true))
 	end)
 
-	function Category:Expand()
+	function Category:Expand(Instant)
 		Category.Expanded = not Category.Expanded
-        if not Gui.CategoryAnimations then
+        if not Gui.CategoryAnimations or Instant == true then
+            ScrollingFrame.Size = UDim2.new(1, 0, 0, GetHeight())
             ScrollingFrame.Visible = Category.Expanded
             Arrow.Rotation = Category.Expanded and 0 or -90
+            UICorner.BottomLeftRadius = UDim.new(0, Category.Expanded and 0 or 5)
+            UICorner.BottomRightRadius = UDim.new(0, Category.Expanded and 0 or 5)
             return
         end
 		if Tween then
@@ -3812,11 +3901,13 @@ function Gui:CreateCategory(Properties)
 	end)
 
 	function Category:CreateModule(Properties)
+        Gui:RemoveModule(Properties.Name)
 		local Module = {
 			Enabled = false,
 			Hold = false,
-			Options = {},
-            Buttons = {},
+            Keybind = 'None',
+			Options = setmetatable({}, LengthMetatable),
+            Keybinds = setmetatable({}, LengthMetatable)
 		}
 
 		local Button = Instance.new("TextButton")
@@ -3828,74 +3919,165 @@ function Gui:CreateCategory(Properties)
 		Button.TextColor3 = GetColor('Text/Primary')
 		Button.TextSize = 17
 		Button.AutoButtonColor = false
-		Button.FontFace = Gui.Fonts.Regular.Font
-		Button.LayoutOrder = GetTableLength(Gui.Modules)
+		Button.FontFace = GetFont('Regular')
+		Button.LayoutOrder = #Gui.Modules
 		Button.Parent = ScrollingFrame
 		AddCorner(Button, UDim.new(0, 5))
 		AddTooltip(Button, Properties.Info or Properties.Tooltip)
 		AddHighlight(Button)
 		AddMaid(Module)
 
-		local EnabledIndicator = Instance.new("Frame")
-		EnabledIndicator.Name = "Enabled"
-		EnabledIndicator.BackgroundColor3 = GetColor('Main/DisabledBar')
-		EnabledIndicator.Size = UDim2.fromOffset(2, 20)
-		EnabledIndicator.Position = UDim2.new(1, -6, 0, 3)
-		EnabledIndicator.BorderSizePixel = 0
-		EnabledIndicator.Parent = Button
+		local EnabledBar = Instance.new("Frame")
+		EnabledBar.Name = "Enabled"
+		EnabledBar.BackgroundColor3 = GetColor('Main/DisabledBar')
+		EnabledBar.Size = UDim2.fromOffset(2, 20)
+		EnabledBar.Position = UDim2.new(1, -6, 0, 3)
+		EnabledBar.BorderSizePixel = 0
+		EnabledBar.Parent = Button
 
-		local TextSize = GetTextSize(` {Properties.Name}`, 17, Gui.Fonts.Regular.Font, 1000).X
+		local TextSize = GetTextSize(` {Properties.Name}`, 17, GetFont('Regular'), 1000).X
 
 		if TextSize > (TopBar.Size.X.Offset - 10) then
 			TopBar.Size = UDim2.fromOffset(TextSize, 28)
 			UpdateCategoryPositions()
 		end
 
-		local KeybindTemplate = CreateKeybindTemplate({
-			LayoutOrder = 0,
-			Name = Properties.Name,
-			Text = " Keybind",
-			Parent = Gui.Menus.Options.Object.ScrollingFrame,
-		})
+        local KeybindFrame
 
-		do
-			KeybindTemplate.BindButton.MouseButton1Click:Connect(function()
-				if Gui.Binding then
-					Gui.Binding = nil
-					KeybindTemplate.BindButton.Text = Module.Keybind or "None"
-				else
-					KeybindTemplate.BindButton.Text = "Press Key"
-					Gui.Binding = Module
-				end
-			end)
+        Run(function()
+            KeybindFrame = Instance.new("Frame")
+            KeybindFrame.Name = `{Properties.Name}Keybind`
+            KeybindFrame.BackgroundTransparency = 1
+            KeybindFrame.Size = UDim2.new(1, -100, 0, 40)
+            KeybindFrame.LayoutOrder = 0
+            KeybindFrame.Parent = Gui.Menus.Options.Object.ScrollingFrame
 
-			function Module:SetKeybind(Bind)
-				Module.Keybind = Bind
-				KeybindTemplate.BindButton.Text = Bind or "None"
-			end
+            local Background = Instance.new("Frame")
+            Background.Name = "Background"
+            Background.BackgroundColor3 = GetColor('Background/Button')
+            Background.BorderSizePixel = 0
+            Background.Size = UDim2.new(1, -45, 1, 0)
+            Background.Parent = KeybindFrame
+            AddCorner(Background, UDim.new(0, 7))
 
-			function Module:ToggleHold()
-				Module.Hold = not Module.Hold
-				TweenService:Create(KeybindTemplate.EnabledIndicator, Info, {BackgroundColor3 = Module.Hold and GetColor('Main/EnabledBar') or GetColor('Main/DisabledBar')}):Play()
-			end
+            local KeybindName = Instance.new("TextLabel")
+            KeybindName.Name = "KeybindName"
+            KeybindName.BackgroundTransparency = 1
+            KeybindName.Size = UDim2.fromOffset(200, 40)
+            KeybindName.TextColor3 = GetColor('Text/Primary')
+            KeybindName.TextSize = 24
+            KeybindName.FontFace = GetFont('Regular')
+            KeybindName.Text = ' Keybind'
+            KeybindName.TextXAlignment = Enum.TextXAlignment.Left
+            KeybindName.Parent = Background
 
-			KeybindTemplate.DeleteKeybind.MouseButton1Click:Connect(Module.SetKeybind)
-			KeybindTemplate.Hold.MouseButton1Click:Connect(Module.ToggleHold)
-		end
+            local BindButton = Instance.new("TextButton")
+            BindButton.Name = "BindButton"
+            BindButton.BackgroundColor3 = GetColor('Background/Secondary')
+            BindButton.BorderSizePixel = 0
+            BindButton.Size = UDim2.fromOffset(200, 30)
+            BindButton.Position = UDim2.fromOffset(200, 5)
+            BindButton.TextColor3 = GetColor('Text/Primary')
+            BindButton.TextSize = 24
+            BindButton.FontFace = GetFont('Regular')
+            BindButton.Text = Properties.Keybind or "None"
+            BindButton.AutoButtonColor = false
+            BindButton.Parent = Background
+            AddCorner(BindButton, UDim.new(0, 7))
+            AddHighlight(BindButton, GetColor('Background/Secondary'))
+            AddTooltip(BindButton, "Click to bind")
+
+            local DeleteKeybind = Instance.new("TextButton")
+            DeleteKeybind.Name = "Delete"
+            DeleteKeybind.BackgroundColor3 = GetColor('Background/Button')
+            DeleteKeybind.Text = ""
+            DeleteKeybind.BorderSizePixel = 0
+            DeleteKeybind.Size = UDim2.fromOffset(40, 40)
+            DeleteKeybind.Position = UDim2.new(1, -40, 0, 0)
+            DeleteKeybind.AutoButtonColor = false
+            DeleteKeybind.Parent = KeybindFrame
+            AddCorner(DeleteKeybind, UDim.new(0, 7))
+            AddHighlight(DeleteKeybind)
+            AddTooltip(DeleteKeybind, "Click to delete keybind")
+
+            local DeleteKeybindImage = Instance.new("ImageLabel")
+            DeleteKeybindImage.Name = "Image"
+            DeleteKeybindImage.BackgroundTransparency = 1
+            DeleteKeybindImage.Size = UDim2.fromOffset(24, 24)
+            DeleteKeybindImage.Position = UDim2.fromOffset(8, 8)
+            SetIcon(DeleteKeybindImage, "x")
+            DeleteKeybindImage.Parent = DeleteKeybind
+
+            local Hold = Instance.new("TextButton")
+            Hold.Name = "ToggleOnRelease"
+            Hold.BackgroundColor3 = GetColor('Background/Secondary')
+            Hold.BorderSizePixel = 0
+            Hold.Size = UDim2.fromOffset(140, 30)
+            Hold.Position = UDim2.fromOffset(410, 5)
+            Hold.TextColor3 = GetColor('Text/Primary')
+            Hold.TextSize = 24
+            Hold.FontFace = GetFont('Regular')
+            Hold.AutoButtonColor = false
+            Hold.Text = "Hold"
+            Hold.Parent = Background
+            AddCorner(Hold, UDim.new(0, 7))
+            AddHighlight(Hold, GetColor('Background/Secondary'))
+            AddTooltip(Hold, `Toggles off the module when releasing the keybind`)
+
+            local EnabledBar = Instance.new("Frame")
+            EnabledBar.Name = "Enabled"
+            EnabledBar.BackgroundColor3 = Properties.Hold and GetColor('Main/EnabledBar') or GetColor('Main/DisabledBar')
+            EnabledBar.Size = UDim2.fromOffset(2, 24)
+            EnabledBar.Position = UDim2.new(1, -8, 0, 3)
+            EnabledBar.BorderSizePixel = 0
+            EnabledBar.Parent = Hold
+
+            BindButton.MouseButton1Click:Connect(function()
+                if Gui.Binding then
+                    Gui.Binding = nil
+                    BindButton.Text = Module.Keybind or 'None'
+                else
+                    BindButton.Text = "Press Key"
+                    task.wait()
+                    Gui.Binding = Module
+                end
+            end)
+
+            function Module:SetKeybind(Bind)
+                self.Keybind = Bind or 'None'
+                BindButton.Text = Bind or 'None'
+            end
+
+            function Module:ToggleHold()
+                self.Hold = not self.Hold
+                TweenEnabledBar(EnabledBar, self.Hold)
+            end
+
+            DeleteKeybind.MouseButton1Click:Connect(function()
+                Module:SetKeybind('None')
+            end)
+            Hold.MouseButton1Click:Connect(function()
+                Module:ToggleHold()
+            end)
+        end)
+
+        local ModuleToggledString = "%s has been <font color = '#%s'>%s</font>"
 
 		function Module:Toggle(NoNotify)
-			Module.Enabled = not Module.Enabled
+			self.Enabled = not self.Enabled
 			if not NoNotify then
+                local Text = self.Enabled and 'Enabled' or 'Disabled'
+                local Color = GetColor(`Notification/Module{Text}`):ToHex()
 				Notify({
 					Title = "Module Toggled",
-					Text = `{Properties.Name} has been {Module.Enabled and `<font color = '#{GetColor('Notification/ModuleEnabled'):ToHex()}'>Enabled</font>` or `<font color = '#{GetColor('Notification/ModuleDisabled'):ToHex()}'>Disabled</font>`}`,
+					Text = ModuleToggledString:format(Properties.Name, Color, Text),
 					Duration = 2,
 				})
 			end
 
-			TweenService:Create(EnabledIndicator, Info, {BackgroundColor3 = Module.Enabled and GetColor('Main/EnabledBar') or GetColor('Main/DisabledBar')}):Play()
+            TweenEnabledBar(EnabledBar, self.Enabled)
 
-			if Module.Enabled then
+			if self.Enabled then
 				ModuleList:AddModule(Properties.Name)
                 if Properties.Enabled then
                     task.spawn(Properties.Enabled)
@@ -3912,79 +4094,20 @@ function Gui:CreateCategory(Properties)
 			end
 		end
 
-		function Module:CreateKeybind(Properties)
-			local Keybind = {
-				Keybind = Properties.Keybind,
-				Hold = false,
-                Type = "Keybind"
-			}
-
-			local KeybindTemplate = CreateKeybindTemplate({
-				LayoutOrder = GetTableLength(Module.Options),
-				Name = Properties.Name,
-				Text = Properties.Text or ` {Properties.Name} Keybind`,
-				Keybind = Properties.Keybind,
-				Hold = Properties.Hold,
-				Parent = Gui.Menus.Options.Object.ScrollingFrame,
-			})
-
-			KeybindTemplate.BindButton.MouseButton1Click:Connect(function()
-				if Gui.Binding then
-					Gui.Binding = nil
-					KeybindTemplate.BindButton.Text = Keybind.Keybind or "None"
-				else
-					KeybindTemplate.BindButton.Text = "Press Key"
-					Gui.Binding = Keybind
-				end
-			end)
-
-			function Keybind:SetKeybind(Bind)
-				Keybind.Keybind = Bind or "None"
-				KeybindTemplate.BindButton.Text = Bind or "None"
-			end
-
-			function Keybind:ToggleHold()
-				if Properties.Hold == nil or Properties.Hold == true then
-					Keybind.Hold = not Keybind.Hold
-					TweenService:Create(KeybindTemplate.EnabledIndicator, Info, {BackgroundColor3 = Keybind.Hold and GetColor('Main/EnabledBar') or GetColor('Main/DisabledBar')}):Play()
-				end
-			end
-
-			function Keybind:Save(Tab)
-				Tab[`{Properties.Name:gsub(" ", "")}Keybind`] = {
-					Hold = Keybind.Hold,
-					Keybind = Keybind.Keybind or "None"
-				}
-			end
-
-			function Keybind:Load(Tab)
-				Keybind:SetKeybind(Tab.Keybind)
-				if Keybind.Hold ~= Tab.Hold then
-					Keybind:ToggleHold()
-				end
-			end
-
-			KeybindTemplate.DeleteKeybind.MouseButton1Click:Connect(Keybind.SetKeybind)
-			if Properties.Hold == nil or Properties.Hold == true then
-				KeybindTemplate.Hold.MouseButton1Click:Connect(Keybind.ToggleHold)
-			end
-
-			Keybind.Object = KeybindTemplate.KeybindFrame
-
-			Module.Options[`{Properties.Name}Keybind`] = Keybind
-
-			return Keybind
-		end
-
-		Button.MouseButton1Click:Connect(Module.Toggle)
+		Button.MouseButton1Click:Connect(function()
+            Module:Toggle()
+        end)
 		Button.MouseButton2Click:Connect(function()
 			Tooltip.Visible = false
 			CategoryHolder.Visible = false
 			Gui.Menus.Options:HideChildren()
-			for i, v in Module.Options do
+			for _, v in Module.Options do
 				v.Object.Visible = if v.Visible ~= nil then v.Visible else true
 			end
-			KeybindTemplate.KeybindFrame.Visible = true
+            for _, v in Module.Keybinds do
+                v.Object.Visible = true
+            end
+			KeybindFrame.Visible = true
             Gui.Menus.Options.Object.NameLabel.Text = Properties.Name
 			Gui.Menus.Options:Show()
 		end)
@@ -3994,6 +4117,7 @@ function Gui:CreateCategory(Properties)
 		for i, v in Templates do
 			Module[`Create{i}`] = function(_, Properties)
 				Properties.Parent = Gui.Menus.Options.Object.ScrollingFrame
+                Properties.LayoutOrder = #Module.Options + #Module.Keybinds
 				Properties.Module = Module
 				return v(Properties)
 			end
@@ -4006,7 +4130,9 @@ function Gui:CreateCategory(Properties)
 
 	function Category:CreateButton(Properties)
 		local Button = {
-			Options = {}
+            Keybind = 'None',
+			Options = setmetatable({}, LengthMetatable),
+            Keybinds = setmetatable({}, LengthMetatable)
 		}
 
 		local TextButton = Instance.new("TextButton")
@@ -4016,10 +4142,10 @@ function Gui:CreateCategory(Properties)
 		TextButton.Size = UDim2.new(1, -10, 0, 26)
 		TextButton.TextColor3 = GetColor('Text/Primary')
 		TextButton.TextSize = 17
-		TextButton.FontFace = Gui.Fonts.Regular.Font
+		TextButton.FontFace = GetFont('Regular')
 		TextButton.Text = ` {Properties.Name}`
 		TextButton.AutoButtonColor = false
-        TextButton.LayoutOrder = GetTableLength(Gui.Modules)
+        TextButton.LayoutOrder = #Gui.Modules + #Gui.Buttons
 		TextButton.Parent = ScrollingFrame
 		AddCorner(TextButton, UDim.new(0, 5))
 		AddTooltip(TextButton, Properties.Info or Properties.Tooltip)
@@ -4031,14 +4157,106 @@ function Gui:CreateCategory(Properties)
 			end
 		end
 
+        local KeybindFrame
+
+        Run(function()
+            KeybindFrame = Instance.new("Frame")
+            KeybindFrame.Name = `{Properties.Name}Keybind`
+            KeybindFrame.BackgroundTransparency = 1
+            KeybindFrame.Size = UDim2.new(1, -100, 0, 40)
+            KeybindFrame.LayoutOrder = 0
+            KeybindFrame.Parent = Gui.Menus.Options.Object.ScrollingFrame
+
+            local Background = Instance.new("Frame")
+            Background.Name = "Background"
+            Background.BackgroundColor3 = GetColor('Background/Button')
+            Background.BorderSizePixel = 0
+            Background.Size = UDim2.new(1, -45, 1, 0)
+            Background.Parent = KeybindFrame
+            AddCorner(Background, UDim.new(0, 7))
+
+            local KeybindName = Instance.new("TextLabel")
+            KeybindName.Name = "KeybindName"
+            KeybindName.BackgroundTransparency = 1
+            KeybindName.Size = UDim2.fromOffset(200, 40)
+            KeybindName.TextColor3 = GetColor('Text/Primary')
+            KeybindName.TextSize = 24
+            KeybindName.FontFace = GetFont('Regular')
+            KeybindName.Text = ' Keybind'
+            KeybindName.TextXAlignment = Enum.TextXAlignment.Left
+            KeybindName.Parent = Background
+
+            local BindButton = Instance.new("TextButton")
+            BindButton.Name = "BindButton"
+            BindButton.BackgroundColor3 = GetColor('Background/Secondary')
+            BindButton.BorderSizePixel = 0
+            BindButton.Size = UDim2.fromOffset(200, 30)
+            BindButton.Position = UDim2.fromOffset(350, 5)
+            BindButton.TextColor3 = GetColor('Text/Primary')
+            BindButton.TextSize = 24
+            BindButton.FontFace = GetFont('Regular')
+            BindButton.Text = Properties.Keybind or "None"
+            BindButton.AutoButtonColor = false
+            BindButton.Parent = Background
+            AddCorner(BindButton, UDim.new(0, 7))
+            AddHighlight(BindButton, GetColor('Background/Secondary'))
+            AddTooltip(BindButton, "Click to bind")
+
+            local DeleteKeybind = Instance.new("TextButton")
+            DeleteKeybind.Name = "Delete"
+            DeleteKeybind.BackgroundColor3 = GetColor('Background/Button')
+            DeleteKeybind.Text = ""
+            DeleteKeybind.BorderSizePixel = 0
+            DeleteKeybind.Size = UDim2.fromOffset(40, 40)
+            DeleteKeybind.Position = UDim2.new(1, -40, 0, 0)
+            DeleteKeybind.AutoButtonColor = false
+            DeleteKeybind.Parent = KeybindFrame
+            AddCorner(DeleteKeybind, UDim.new(0, 7))
+            AddHighlight(DeleteKeybind)
+            AddTooltip(DeleteKeybind, "Click to delete keybind")
+
+            local DeleteKeybindImage = Instance.new("ImageLabel")
+            DeleteKeybindImage.Name = "Image"
+            DeleteKeybindImage.BackgroundTransparency = 1
+            DeleteKeybindImage.Size = UDim2.fromOffset(24, 24)
+            DeleteKeybindImage.Position = UDim2.fromOffset(8, 8)
+            SetIcon(DeleteKeybindImage, "x")
+            DeleteKeybindImage.Parent = DeleteKeybind
+
+            BindButton.MouseButton1Click:Connect(function()
+                if Gui.Binding then
+                    Gui.Binding = nil
+                    BindButton.Text = Button.Keybind or 'None'
+                else
+                    BindButton.Text = "Press Key"
+                    task.wait()
+                    Gui.Binding = Button
+                end
+            end)
+
+            function Button:SetKeybind(Bind)
+                self.Keybind = Bind or 'None'
+                BindButton.Text = Bind or 'None'
+            end
+
+            DeleteKeybind.MouseButton1Click:Connect(function()
+                Button:SetKeybind('None')
+            end)
+        end)
+
 		TextButton.MouseButton1Click:Connect(Button.Toggle)
 		TextButton.MouseButton2Click:Connect(function()
 			Tooltip.Visible = false
 			CategoryHolder.Visible = false
 			Gui.Menus.Options:HideChildren()
-			for i, v in Button.Options do
+			for _, v in Button.Options do
 				v.Object.Visible = if v.Visible ~= nil then v.Visible else true
 			end
+            for _, v in Button.Keybinds do
+                v.Object.Visible = true
+            end
+            KeybindFrame.Visible = true
+            Gui.Menus.Options.Object.NameLabel.Text = Properties.Name
 			Gui.Menus.Options:Show()
 		end)
 
@@ -4047,6 +4265,7 @@ function Gui:CreateCategory(Properties)
 		for i, v in Templates do
 			Button[`Create{i}`] = function(_, Properties)
 				Properties.Parent = Gui.Menus.Options.Object.ScrollingFrame
+                Properties.LayoutOrder = #Button.Options + #Button.Keybinds
 				Properties.Module = Button
 				return v(Properties)
 			end
@@ -4101,23 +4320,28 @@ local KeepOnTeleport; KeepOnTeleport = ConfigMenu:CreateToggle({
             TeleportCheck = true
             local Code = ''
             if shared.TidalWaveDev then
-                Code = 'shared.TidalWaveDev = true\nloadfile("TidalWave.lua")()'
+                Code = 'loadfile("Loader.lua")()'
             else
-                Code = 'loadstring(game:HttpGet("https://github.com/fluidnarrator30/Tidal-Wave/blob/main/TidalWave.lua"))()'
+                Code = 'loadstring(game:HttpGet("https://github.com/fluidnarrator30/Tidal-Wave/blob/main/Loader.lua", true))()'
             end
             queueonteleport(Code)
         end))
     end
 })
 
+local AllowMouseBinding; AllowMouseBinding = ConfigMenu:CreateToggle({
+    Name = "Allow Mouse Binding",
+    Info = "Allows you to bind modules to mouse buttons.",
+})
+
 local MenuKeybind = ConfigMenu:CreateKeybind({
 	Name = "Menu",
-	Default = "RightShift"
+	Keybind = "RightShift"
 })
 
 local MenuKeybind2 = ConfigMenu:CreateKeybind({
 	Name = "Menu2",
-	Text = " Menu Keybind 2:"
+	Text = "Menu Keybind 2"
 })
 
 local DoneButton, UpdateFonts
@@ -4131,32 +4355,30 @@ do
 		if IsTextObject(Obj) then
 			Obj.FontFace = Font
 		elseif Obj:IsA("Frame") then
-			for i, v in Obj:GetChildren() do
-				if IsTextObject(v) then
-					SetFont(v,  Font)
-				end
+			for _, v in Obj:GetChildren() do
+                SetFont(v, Font)
 			end
 		end
 	end
 
 	UpdateFonts = function()
-		local Font = Gui.Fonts.Regular.Font
-		local SemiBoldFont = Gui.Fonts.SemiBold.Font
-		local BoldFont = Gui.Fonts.Bold.Font
+		local Font = GetFont('Regular')
+		local SemiBoldFont = GetFont('SemiBold')
+		local BoldFont = GetFont('Bold')
 
 		DoneButton.FontFace = Font
 		Tooltip.FontFace = Font
 
 		for i, v in Gui.Menus do
 			SetFont(v.Object.NameLabel, SemiBoldFont)
-			for i2, v2 in v.Object.ScrollingFrame:GetDescendants() do
+			for _, v2 in v.Object.ScrollingFrame:GetDescendants() do
 				SetFont(v2, Font)
 			end
 		end
 
 		for i, v in Gui.Categories do
 			SetFont(v.Object, SemiBoldFont)
-			for i2, v2 in v.Object.ScrollingFrame:GetDescendants() do
+			for _, v2 in v.Object.ScrollingFrame:GetDescendants() do
 				SetFont(v2, Font)
 			end
 		end
@@ -4239,16 +4461,16 @@ local ReloadButton = ConfigMenu:CreateButton({
 	Function = function()
 		Gui:Shutdown()
 		if IsStudio then
-			for i, v in script.Parent.Parent.Games:GetChildren() do
+			for _, v in script.Parent.Parent.Games:GetChildren() do
 				v.Enabled = false
 			end
 			script.Parent.Parent.Enabled = false
 			script.Parent.Parent.Enabled = true
 		else
 			if shared.TidalWaveDev then
-				loadfile("TidalWave.lua")()
+				loadfile("Loader.lua")()
 			else
-				loadstring(game:HttpGet("https://github.com/fluidnarrator30/Tidal-Wave/blob/main/TidalWave.lua"))()
+				loadstring(game:HttpGet("https://raw.githubusercontent.com/fluidnarrator30/Tidal-Wave/refs/heads/main/Loader.lua", true))()
 			end
 		end
 	end,
@@ -4376,7 +4598,7 @@ do
 		Frame.Name = `{Properties.Name}Dropdown`
 		Frame.BackgroundTransparency = 1
 		Frame.Size = UDim2.new(1, -100, 0, 40)
-		Frame.LayoutOrder = GetTableLength(GuiMenu.Options)
+		Frame.LayoutOrder = #GuiMenu.Options + #GuiMenu.Keybinds
 		Frame.Parent = GuiMenu.Object.ScrollingFrame
 
 		local Background = Instance.new("Frame")
@@ -4391,7 +4613,7 @@ do
 		TextLabel.TextColor3 = GetColor('Text/Primary')
 		TextLabel.BackgroundTransparency = 1
 		TextLabel.Size = UDim2.new(0, 200, 1, 0)
-		TextLabel.FontFace = Gui.Fonts.Regular.Font
+		TextLabel.FontFace = GetFont('Regular')
 		TextLabel.TextSize = 24
 		TextLabel.TextXAlignment = Enum.TextXAlignment.Left
 		TextLabel.Text = ` {Properties.Name}`
@@ -4416,9 +4638,10 @@ do
 		TopBarLabel.Text = `   {Properties.List[1] or "None"}`
 		TopBarLabel.TextSize = 24
 		TopBarLabel.TextColor3 = GetColor('Text/Primary')
-		TopBarLabel.FontFace = Gui.Fonts.Regular.Font
+		TopBarLabel.FontFace = GetFont('Regular')
 		TopBarLabel.TextXAlignment = Enum.TextXAlignment.Left
 		TopBarLabel.Parent = TopBar
+
         local UICorner = Instance.new("UICorner")
         UICorner.CornerRadius = UDim.new(0, 7)
         UICorner.Parent = TopBarLabel
@@ -4560,7 +4783,7 @@ do
 			Button.Size = UDim2.fromOffset(220, 30)
 			Button.BackgroundColor3 = GetColor('Background/Button')
 			Button.TextColor3 = GetColor('Text/Primary')
-			Button.FontFace = Gui.Fonts.Regular.Font
+			Button.FontFace = GetFont('Regular')
 			Button.TextSize = 20
 			Button.Text = `  {Properties.Name}`
 			Button.LayoutOrder = Properties.LayoutOrder or 0
@@ -4603,7 +4826,7 @@ do
                 RenameTextBox.Position = UDim2.fromOffset(10, 0)
                 RenameTextBox.TextSize = 20
                 RenameTextBox.TextColor3 = GetColor('Text/Primary')
-                RenameTextBox.FontFace = Gui.Fonts.Regular.Font
+                RenameTextBox.FontFace = GetFont('Regular')
                 RenameTextBox.ClearTextOnFocus = false
                 RenameTextBox.TextXAlignment = Enum.TextXAlignment.Left
                 RenameTextBox.Visible = false
@@ -4752,11 +4975,11 @@ end
 Run(function()
     local List = {}
     if IsStudio then
-        for i, v in script.Parent:GetChildren() do
+        for _, v in script.Parent:GetChildren() do
             table.insert(List, v.Name)
         end
     else
-        for i, v in listfiles("TidalWave/Guis") do
+        for _, v in listfiles("TidalWave/Guis") do
             table.insert(List, v:gsub("\\", "/"):split("/")[3]:split(".")[1])
         end
     end
@@ -4858,7 +5081,7 @@ DoneButton.BorderSizePixel = 0
 DoneButton.Text = "Done"
 DoneButton.TextColor3 = GetColor('Text/Primary')
 DoneButton.TextSize = 36
-DoneButton.FontFace = Gui.Fonts.Regular.Font
+DoneButton.FontFace = GetFont('Regular')
 DoneButton.Visible = false
 DoneButton.Parent = GuiFolder
 
@@ -5304,6 +5527,10 @@ local function LoadThemes(JSON)
     return NewThemes
 end
 
+local function TableToUDim2(Tab)
+    return UDim2.new(Tab.X.Scale, Tab.X.Offset, Tab.Y.Scale, Tab.Y.Offset)
+end
+
 function Gui:Load(Profile)
 	if not readfile then return end
 
@@ -5317,7 +5544,9 @@ function Gui:Load(Profile)
             Profile = "Default",
             Profiles = {"Default"},
             Theme = Gui.Theme,
-            Menus = {}
+            Menus = {},
+            HudLocations = {},
+            Categories = {}
         }
     end
 
@@ -5360,19 +5589,40 @@ function Gui:Load(Profile)
             if i2 == "Gui" then continue end
             local Option = Menu.Options[i2]
             if not Option then continue end
-            if typeof(v2) == "string" then
-                Option:Load(v2)
-            elseif Option.Options and v2.Options then
+            if typeof(v2) == "table" and v2.Options and Option.Options then
                 Gui:LoadOptions(Option, v2.Options)
                 if Option.Enabled ~= v2.Enabled then
                     Option:Toggle()
                 end
+            else
+                Option:Load(v2)
             end
         end
         for i2, v2 in v.Keybinds do
             local Keybind = Menu.Keybinds[i2]
             if not Keybind then continue end
             Keybind:Load(v2)
+        end
+    end
+
+    for i, v in Config.HudLocations do
+        local HudObject = HudFolder:FindFirstChild(i)
+        if HudObject then
+            HudObject.Position = TableToUDim2(v)
+        end
+    end
+
+    for i, v in Config.Categories do
+        local Category = Gui.Categories[i]
+        if Category then
+            local Pos = TableToUDim2(v.Location)
+            Category:SetOpenedPosition(Pos)
+			if CategoryHolder.Visible and not Category:IsMoving() then
+				Category.Object.Position = Pos
+			end
+            if Category.Expanded ~= v.Expanded then
+                Category:Expand(true)
+            end
         end
     end
 
@@ -5398,6 +5648,14 @@ function Gui:Load(Profile)
 				Module:Toggle(true)
 			end
 		end
+        for i, v in Settings.Buttons do
+            local Button = Gui.Buttons[i]
+            if not Button then return end
+            if Button.Options and v.Options then
+                Gui:LoadOptions(Button, v.Options)
+            end
+            Button:SetKeybind(v.Keybind)
+        end
 	end
 end
 
@@ -5422,6 +5680,19 @@ local function SaveThemes()
     return Tab
 end
 
+local function UDim2ToTable(Pos)
+    return {
+        X = {
+            Scale = Pos.X.Scale,
+            Offset = Pos.X.Offset
+        },
+        Y = {
+            Scale = Pos.Y.Scale,
+            Offset = Pos.Y.Offset
+        }
+    }
+end
+
 function Gui:Save(Profile)
 	if not writefile then return end
 
@@ -5437,7 +5708,9 @@ function Gui:Save(Profile)
         },
         Themes = SaveThemes(),
         Theme = Gui.Theme or 'TidalWave',
-        Menus = {}
+        Menus = {},
+        HudLocations = {},
+        Categories = {}
 	}
 
 	for i, v in Gui.Menus do
@@ -5453,16 +5726,28 @@ function Gui:Save(Profile)
                     Options = Gui:SaveOptions(v2.Options)
                 }
             else
-                v2:Save(Config.Menus[i])
+                v2:Save(Config.Menus[i].Options)
             end
         end
-        for i2, v2 in v.Keybinds do
+        for _, v2 in v.Keybinds do
             v2:Save(Config.Menus[i].Keybinds)
         end
 	end
 
+    for _, v in HudFolder:GetChildren() do
+        Config.HudLocations[v.Name] = UDim2ToTable(v.Position)
+    end
+
+    for i, v in Gui.Categories do
+        Config.Categories[i] = {
+            Location = UDim2ToTable(v.Object.Position),
+            Expanded = v.Expanded
+        }
+    end
+
 	local Settings = {
-		Modules = {}
+		Modules = {},
+        Buttons = {}
 	}
 
 	for i, v in Gui.Modules do
@@ -5474,6 +5759,13 @@ function Gui:Save(Profile)
 		}
 	end
 
+    for i, v in Gui.Buttons do
+        Settings.Buttons[i] = {
+            Keybind = v.Keybind,
+            Options = Gui:SaveOptions(v.Options)
+        }
+    end
+
 	writefile(`TidalWave/Profiles/Gui{game.GameId}.json`, HttpService:JSONEncode(Config))
 	writefile(`TidalWave/Profiles/{Config.Profile}{game.PlaceId}.json`, HttpService:JSONEncode(Settings))
 end
@@ -5483,7 +5775,7 @@ function ProfilesMenu:CreateProfileButton(Properties)
 	Frame.Name = `{Properties.Name}Button`
 	Frame.BackgroundTransparency = 1
 	Frame.Size = UDim2.new(1, -100, 0, 40)
-	Frame.LayoutOrder = Properties.LayoutOrder or GetTableLength(ProfilesMenu.Options)
+	Frame.LayoutOrder = Properties.LayoutOrder or #ProfilesMenu.Options
 	Frame.Parent = ProfilesMenu.Object.ScrollingFrame
 
 	local Background = Instance.new("Frame")
@@ -5502,7 +5794,7 @@ function ProfilesMenu:CreateProfileButton(Properties)
 	NameLabel.Text = Properties.Name
 	NameLabel.TextSize = 24
 	NameLabel.TextColor3 = GetColor('Text/Primary')
-	NameLabel.FontFace = Gui.Fonts.Regular.Font
+	NameLabel.FontFace = GetFont('Regular')
 	NameLabel.AutoButtonColor = false
 	NameLabel.Parent = Background
 
@@ -5512,7 +5804,7 @@ function ProfilesMenu:CreateProfileButton(Properties)
 	RenameTextBox.Size = UDim2.fromOffset(200, 40)
 	RenameTextBox.TextSize = 24
 	RenameTextBox.TextColor3 = GetColor('Text/Primary')
-	RenameTextBox.FontFace = Gui.Fonts.Regular.Font
+	RenameTextBox.FontFace = GetFont('Regular')
 	RenameTextBox.ClearTextOnFocus = false
 	RenameTextBox.TextXAlignment = Enum.TextXAlignment.Left
 	RenameTextBox.Visible = false
@@ -5548,7 +5840,7 @@ function ProfilesMenu:CreateProfileButton(Properties)
 	Load.Position = UDim2.new(1, -105, 0, 5)
 	Load.TextColor3 = GetColor('Text/Primary')
 	Load.TextSize = 24
-	Load.FontFace = Gui.Fonts.Regular.Font
+	Load.FontFace = GetFont('Regular')
 	Load.AutoButtonColor = false
 	Load.Parent = Background
 	AddCorner(Load, UDim.new(0, 7))
@@ -5563,7 +5855,7 @@ function ProfilesMenu:CreateProfileButton(Properties)
 	Save.Position = UDim2.new(1, -210, 0, 5)
 	Save.TextColor3 = GetColor('Text/Primary')
 	Save.TextSize = 24
-	Save.FontFace = Gui.Fonts.Regular.Font
+	Save.FontFace = GetFont('Regular')
 	Save.AutoButtonColor = false
 	Save.Parent = Background
 	AddCorner(Save, UDim.new(0, 7))
@@ -5688,7 +5980,7 @@ function FriendsMenu:CreateFriendButton(Properties)
 	Frame.Name = `{Properties.Name}Button`
 	Frame.BackgroundTransparency = 1
 	Frame.Size = UDim2.new(1, -100, 0, 40)
-	Frame.LayoutOrder = Properties.LayoutOrder or GetTableLength(ProfilesMenu.Options)
+	Frame.LayoutOrder = Properties.LayoutOrder or #FriendsMenu.Options
 	Frame.Parent = FriendsMenu.Object.ScrollingFrame
 
 	local Background = Instance.new("Frame")
@@ -5707,20 +5999,20 @@ function FriendsMenu:CreateFriendButton(Properties)
 	NameLabel.Text = Properties.Name
 	NameLabel.TextSize = 24
 	NameLabel.TextColor3 = GetColor('Text/Primary')
-	NameLabel.FontFace = Gui.Fonts.Regular.Font
+	NameLabel.FontFace = GetFont('Regular')
 	NameLabel.AutoButtonColor = false
 	NameLabel.Parent = Background
     AddHighlight(NameLabel)
 
     local Enabled = if Properties.Enabled ~= nil then Properties.Enabled else true
 
-    local EnabledIndicator = Instance.new("Frame")
-    EnabledIndicator.Name = "Enabled"
-    EnabledIndicator.BackgroundColor3 = Enabled and GetColor('Main/EnabledBar') or GetColor('Main/DisabledBar')
-    EnabledIndicator.Size = UDim2.new(0, 2, 1, -6)
-    EnabledIndicator.Position = UDim2.new(1, -8, 0, 3)
-    EnabledIndicator.BorderSizePixel = 0
-    EnabledIndicator.Parent = Background
+    local EnabledBar = Instance.new("Frame")
+    EnabledBar.Name = "Enabled"
+    EnabledBar.BackgroundColor3 = Enabled and GetColor('Main/EnabledBar') or GetColor('Main/DisabledBar')
+    EnabledBar.Size = UDim2.new(0, 2, 1, -6)
+    EnabledBar.Position = UDim2.new(1, -8, 0, 3)
+    EnabledBar.BorderSizePixel = 0
+    EnabledBar.Parent = Background
 
 	local RenameTextBox = Instance.new("TextBox")
 	RenameTextBox.Name = "Rename"
@@ -5728,7 +6020,7 @@ function FriendsMenu:CreateFriendButton(Properties)
 	RenameTextBox.Size = UDim2.fromOffset(200, 40)
 	RenameTextBox.TextSize = 24
 	RenameTextBox.TextColor3 = GetColor('Text/Primary')
-	RenameTextBox.FontFace = Gui.Fonts.Regular.Font
+	RenameTextBox.FontFace = GetFont('Regular')
 	RenameTextBox.ClearTextOnFocus = false
 	RenameTextBox.TextXAlignment = Enum.TextXAlignment.Left
 	RenameTextBox.Visible = false
@@ -5764,7 +6056,7 @@ function FriendsMenu:CreateFriendButton(Properties)
 	Rename.Position = UDim2.new(1, -105, 0, 5)
 	Rename.TextColor3 = GetColor('Text/Primary')
 	Rename.TextSize = 24
-	Rename.FontFace = Gui.Fonts.Regular.Font
+	Rename.FontFace = GetFont('Regular')
 	Rename.AutoButtonColor = false
 	Rename.Parent = Background
 	AddCorner(Rename, UDim.new(0, 7))
@@ -5794,7 +6086,7 @@ function FriendsMenu:CreateFriendButton(Properties)
 
 	NameLabel.MouseButton1Click:Connect(function()
 		Enabled = not Enabled
-        EnabledIndicator.BackgroundColor3 = Enabled and GetColor('Main/EnabledBar') or GetColor('Main/DisabledBar')
+        EnabledBar.BackgroundColor3 = Enabled and GetColor('Main/EnabledBar') or GetColor('Main/DisabledBar')
         Gui.Friends[Properties.Name] = false
 	end)
 
@@ -5883,7 +6175,7 @@ local function CheckKeybind(Keybind, LatestInput)
 	if not Keybind or Keybind == "None" then return false end
 	Keybind = Keybind:split("+")
 	if table.find(Keybind, LatestInput) then
-		for i, v in Keybind do
+		for _, v in Keybind do
 			if not table.find(PressedKeys, v) then
 				return false
 			end
@@ -5894,19 +6186,27 @@ local function CheckKeybind(Keybind, LatestInput)
 	return false
 end
 
+local AllowedUserInputTypes = {
+    ["MouseButton1"] = "MouseButton1",
+    ["MouseButton2"] = "MouseButton2",
+    ["MouseButton3"] = "MouseButton3",
+    ["MouseWheel"] = "MouseWheel",
+}
+
 Gui:Clean(UIS.InputBegan:Connect(function(Input)
 	local TextBox = UIS:GetFocusedTextBox()
 	if TextBox then return end
-	if Gui.Binding and (Input.KeyCode == Enum.KeyCode.Unknown or Input.KeyCode == Enum.KeyCode.Escape) then
+	if Gui.Binding and ((Input.KeyCode == Keys.Unknown and not AllowMouseBinding.Enabled) or Input.KeyCode == Keys.Escape) then
 		Gui.Binding:SetKeybind(Gui.Binding.Keybind)
 		Gui.Binding = nil
-	elseif (Input.KeyCode ~= Enum.KeyCode.Unknown and Input.KeyCode ~= Enum.KeyCode.Escape) then
-		table.insert(PressedKeys, Input.KeyCode.Name)
+	elseif ((AllowMouseBinding.Enabled and AllowedUserInputTypes[Input.UserInputType.Name] or Input.KeyCode ~= Keys.Unknown) and Input.KeyCode ~= Keys.Escape) then
+        local Key = Input.KeyCode == Keys.Unknown and AllowMouseBinding.Enabled and AllowedUserInputTypes[Input.UserInputType.Name] or Input.KeyCode.Name
+		table.insert(PressedKeys, Key)
 		if Gui.Binding then
 			Gui.Binding:SetKeybind(table.concat(PressedKeys, "+"))
 		else
 			local ConfigKeybinds = Gui.Menus.Config.Keybinds
-			if (ConfigKeybinds.Menu.Keybind and CheckKeybind(Gui.Menus.Config.Keybinds.Menu.Keybind, Input.KeyCode.Name)) or (ConfigKeybinds.Menu2.Keybind and CheckKeybind(Gui.Menus.Config.Keybinds.Menu2.Keybind, Input.KeyCode.Name)) then
+			if (ConfigKeybinds.Menu.Keybind and CheckKeybind(Gui.Menus.Config.Keybinds.Menu.Keybind, Key)) or (ConfigKeybinds.Menu2.Keybind and CheckKeybind(Gui.Menus.Config.Keybinds.Menu2.Keybind, Key)) then
 				if MenuOptionsMenu.Object.Visible then
                     MenuOptionsMenu.Object.Visible = false
                     for i, v in Gui.Menus do
@@ -5939,7 +6239,7 @@ Gui:Clean(UIS.InputBegan:Connect(function(Input)
 					TopBar.Visible = true
 					StartCursorCon()
 				end
-				for i, v in Gui.Categories do
+				for _, v in Gui.Categories do
 					v:Toggle()
 				end
 				if not CategoryHolder.Visible and Gui.CategoryAnimations then
@@ -5947,8 +6247,10 @@ Gui:Clean(UIS.InputBegan:Connect(function(Input)
 					Modal.Visible = true
 				end
 			else
-				for i, Module in Gui.Modules do
-					if CheckKeybind(Module.Keybind, Input.KeyCode.Name) then
+                local ModuleToggled = false
+				for _, Module in Gui.Modules do
+                    if TopBar.Visible and AllowedUserInputTypes[Module.Keybind] then continue end
+					if CheckKeybind(Module.Keybind, Key) then
 						if Module.Hold then
 							HeldModule = {Module = Module, Keybind = Module.Keybind}
 							if not Module.Enabled then
@@ -5957,23 +6259,34 @@ Gui:Clean(UIS.InputBegan:Connect(function(Input)
 						else
 							Module:Toggle()
 						end
+                        ModuleToggled = true
 						break
 					end
 				end
+                if not ModuleToggled then
+                    for _, Button in Gui.Buttons do
+                        if TopBar.Visible and AllowedUserInputTypes[Button.Keybind] then continue end
+                        if CheckKeybind(Button.Keybind, Key) then
+                            Button:Toggle()
+                            break
+                        end
+                    end
+                end
 			end
 		end
 	end
 end))
 
 UIS.InputEnded:Connect(function(Input)
-	local Index = table.find(PressedKeys, Input.KeyCode.Name)
+    local Key = Input.KeyCode == Keys.Unknown and AllowMouseBinding.Enabled and AllowedUserInputTypes[Input.UserInputType.Name] or Input.KeyCode.Name
+	local Index = table.find(PressedKeys, Key)
 	if not Index then return end
 	table.remove(PressedKeys, Index)
 	if Gui.Binding then
 		Gui.Binding = nil
 		table.clear(PressedKeys)
 	else
-		if HeldModule and table.find(HeldModule.Keybind:split("+"), Input.KeyCode.Name) then
+		if HeldModule and table.find(HeldModule.Keybind:split("+"), Key) then
 			if HeldModule.Module.Enabled then
 				HeldModule.Module:Toggle()
 			end
@@ -6027,7 +6340,7 @@ Search.BackgroundColor3 = GetColor("Background/Button")
 Search.BackgroundTransparency = 0.25
 Search.BorderSizePixel = 0
 Search.TextColor3 = GetColor("Text/Primary")
-Search.FontFace = Gui.Fonts.Regular.Font
+Search.FontFace = GetFont('Regular')
 Search.TextSize = 24
 Search.TextXAlignment = Enum.TextXAlignment.Left
 Search.ClearTextOnFocus = false

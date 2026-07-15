@@ -100,6 +100,7 @@ Run(function()
                     RemoveCircle()
                     if Old then
                         RaycastModule.Raycast = Old
+                        Old = nil
                     end
                 end)
             end
@@ -123,7 +124,7 @@ Run(function()
                 else
                     RemoveCircle()
                 end
-                for i, v in {Fov, Thickness, OutlineTransparency, FillTransparency, OutlineColor, FillColor} do
+                for _, v in {Fov, Thickness, OutlineTransparency, FillTransparency, OutlineColor, FillColor} do
                     v:SetVisible(Enabled)
                 end
             end

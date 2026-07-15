@@ -4,6 +4,7 @@ local function GetService(Service)
     return CloneRef(game:GetService(Service))
 end
 
+local ContextActionService: ContextActionService = GetService("ContextActionService")
 local Players: Players = GetService("Players")
 local ReplicatedStorage: ReplicatedStorage = GetService("ReplicatedStorage")
 local RunService: RunService = GetService("RunService")
@@ -15,6 +16,7 @@ local TidalWave = shared.TidalWave
 local Categories = TidalWave.Categories
 local CharacterLib = TidalWave.Libraries.CharacterLib
 local Modules = TidalWave.Modules
+local CustomLocalMethods = TidalWave.Libraries.CustomLocalMethods
 
 Modules.Speed.Options.Method:SetValue("CFrame")
 Modules.Fly.Options.FlyMethod:SetValue("CFrame")
@@ -27,12 +29,114 @@ local PlayerCategory = Categories.Player
 local Other = Categories.Other
 local Animations = Categories.Animations
 
-local getsenv = getsenv
-local hookfunction = hookfunction
-local restorefunction = restorefunction
 local setconstant = debug.setconstant or setconstant
 
 local PoopSploit = table.find({"Xeno", "Solara"}, TidalWave.Executor)
+
+local Keys = {
+    ["MouseButton1"] = Enum.UserInputType.MouseButton1,
+	["Unknown"] = Enum.KeyCode.Unknown,
+	["A"] = Enum.KeyCode.A,
+	["B"] = Enum.KeyCode.B,
+	["C"] = Enum.KeyCode.C,
+	["D"] = Enum.KeyCode.D,
+	["E"] = Enum.KeyCode.E,
+	["F"] = Enum.KeyCode.F,
+	["G"] = Enum.KeyCode.G,
+	["H"] = Enum.KeyCode.H,
+	["I"] = Enum.KeyCode.I,
+	["J"] = Enum.KeyCode.J,
+	["K"] = Enum.KeyCode.K,
+	["L"] = Enum.KeyCode.L,
+	["M"] = Enum.KeyCode.M,
+	["N"] = Enum.KeyCode.N,
+	["O"] = Enum.KeyCode.O,
+	["P"] = Enum.KeyCode.P,
+	["Q"] = Enum.KeyCode.Q,
+	["R"] = Enum.KeyCode.R,
+	["S"] = Enum.KeyCode.S,
+	["T"] = Enum.KeyCode.T,
+	["U"] = Enum.KeyCode.U,
+	["V"] = Enum.KeyCode.V,
+	["W"] = Enum.KeyCode.W,
+	["X"] = Enum.KeyCode.X,
+	["Y"] = Enum.KeyCode.Y,
+	["Z"] = Enum.KeyCode.Z,
+	["F1"] = Enum.KeyCode.F1,
+	["F2"] = Enum.KeyCode.F2,
+	["F3"] = Enum.KeyCode.F3,
+	["F4"] = Enum.KeyCode.F4,
+	["F5"] = Enum.KeyCode.F5,
+	["F6"] = Enum.KeyCode.F6,
+	["F7"] = Enum.KeyCode.F7,
+	["F8"] = Enum.KeyCode.F8,
+	["F9"] = Enum.KeyCode.F9,
+	["F10"] = Enum.KeyCode.F10,
+	["F11"] = Enum.KeyCode.F11,
+	["F12"] = Enum.KeyCode.F12,
+	["Backspace"] = Enum.KeyCode.Backspace,
+	["Tab"] = Enum.KeyCode.Tab,
+    ["Enter"] = Enum.KeyCode.Return,
+	["Escape"] = Enum.KeyCode.Escape,
+	["Space"] = Enum.KeyCode.Space,
+	["Quote"] = Enum.KeyCode.Quote,
+	["Comma"] = Enum.KeyCode.Comma,
+	["Minus"] = Enum.KeyCode.Minus,
+	["Period"] = Enum.KeyCode.Period,
+	["Slash"] = Enum.KeyCode.Slash,
+	["Zero"] = Enum.KeyCode.Zero,
+	["One"] = Enum.KeyCode.One,
+	["Two"] = Enum.KeyCode.Two,
+	["Three"] = Enum.KeyCode.Three,
+	["Four"] = Enum.KeyCode.Four,
+	["Five"] = Enum.KeyCode.Five,
+	["Six"] = Enum.KeyCode.Six,
+	["Seven"] = Enum.KeyCode.Seven,
+	["Eight"] = Enum.KeyCode.Eight,
+	["Nine"] = Enum.KeyCode.Nine,
+	["Semicolon"] = Enum.KeyCode.Semicolon,
+	["Equals"] = Enum.KeyCode.Equals,
+	["LeftBracket"] = Enum.KeyCode.LeftBracket,
+	["BackSlash"] = Enum.KeyCode.BackSlash,
+	["RightBracket"] = Enum.KeyCode.RightBracket,
+	["Backquote"] = Enum.KeyCode.Backquote,
+	["Delete"] = Enum.KeyCode.Delete,
+	["KeypadZero"] = Enum.KeyCode.KeypadZero,
+	["KeypadOne"] = Enum.KeyCode.KeypadOne,
+	["KeypadTwo"] = Enum.KeyCode.KeypadTwo,
+	["KeypadThree"] = Enum.KeyCode.KeypadThree,
+	["KeypadFour"] = Enum.KeyCode.KeypadFour,
+	["KeypadFive"] = Enum.KeyCode.KeypadFive,
+	["KeypadSix"] = Enum.KeyCode.KeypadSix,
+	["KeypadSeven"] = Enum.KeyCode.KeypadSeven,
+	["KeypadEight"] = Enum.KeyCode.KeypadEight,
+	["KeypadNine"] = Enum.KeyCode.KeypadNine,
+	["KeypadPeriod"] = Enum.KeyCode.KeypadPeriod,
+	["KeypadDivide"] = Enum.KeyCode.KeypadDivide,
+	["KeypadMultiply"] = Enum.KeyCode.KeypadMultiply,
+	["KeypadMinus"] = Enum.KeyCode.KeypadMinus,
+	["KeypadPlus"] = Enum.KeyCode.KeypadPlus,
+	["KeypadEnter"] = Enum.KeyCode.KeypadEnter,
+	["KeypadEquals"] = Enum.KeyCode.KeypadEquals,
+	["Up"] = Enum.KeyCode.Up,
+	["Down"] = Enum.KeyCode.Down,
+	["Right"] = Enum.KeyCode.Right,
+	["Left"] = Enum.KeyCode.Left,
+	["Insert"] = Enum.KeyCode.Insert,
+	["Home"] = Enum.KeyCode.Home,
+	["End"] = Enum.KeyCode.End,
+	["PageUp"] = Enum.KeyCode.PageUp,
+	["PageDown"] = Enum.KeyCode.PageDown,
+	["NumLock"] = Enum.KeyCode.NumLock,
+	["CapsLock"] = Enum.KeyCode.CapsLock,
+	["ScrollLock"] = Enum.KeyCode.ScrollLock,
+	["RightShift"] = Enum.KeyCode.RightShift,
+	["LeftShift"] = Enum.KeyCode.LeftShift,
+	["RightControl"] = Enum.KeyCode.RightControl,
+	["LeftControl"] = Enum.KeyCode.LeftControl,
+	["RightAlt"] = Enum.KeyCode.RightAlt,
+	["LeftAlt"] = Enum.KeyCode.LeftAlt,
+}
 
 local function Notify(Properties)
     TidalWave:Notify(Properties)
@@ -47,14 +151,8 @@ local function NotifyPoopSploit(Function)
     })
 end
 
-local function SafeRef(Obj, Ref)
-    if not Obj then return nil end
-    for i, v in Ref do
-        Obj = Obj and Obj:FindFirstChild(v) or nil
-        if not Obj then return nil end
-    end
-
-    return Obj
+local function SafeRef(Obj, Path)
+    return CustomLocalMethods:SafeRef(Obj, Path)
 end
 
 local function GetKiller()
@@ -333,70 +431,59 @@ Run(function() -- Movement
     Run(function() -- FastVaultModifier
         local FastVaultModifier, AllowAnyAngle, SpoofMoveDirection, NoDelay, WindowModule, Old
 
-        local One = Vector3.new(1, 0, 0)
-
-        local function ModVector(Vector)
-            return Vector3.new(Vector.X, CharacterLib.Root.Position.Y, Vector.Z)
-        end
-
-        local function VaultWindowHook(self, ...)
-            if CharacterLib.Alive then
-                if AllowAnyAngle.Enabled then
-                    local Far = WindowModule.ActionInfo.Ports.Far
-                    local Close = WindowModule.ActionInfo.Ports.Close
-                    if Far and Close then
-                        local Start = ModVector(Close.Position)
-                        local Target = ModVector(Far.Position)
-                        CharacterLib.Root.CFrame = CFrame.lookAt(Start, Target)
-                    end
-                end
-
-                if SpoofMoveDirection.Enabled then
-                    CharacterLib.Humanoid:Move(One)
-                end
-            end
-
-            return Old(self, ...)
-        end
-
         FastVaultModifier = Movement:CreateModule({
             Name = "FastVaultModifier",
             Info = "Modifies fast vaults",
             Enabled = function()
                 if PoopSploit then NotifyPoopSploit("require") return end
-                local Scripts = SafeRef(Plr, {"Backpack", "Scripts"})
-                local VaultWindow = Scripts and SafeRef(Scripts, {"GlobalSurvivor", "Action", "VaultWindow"})
-                WindowModule = VaultWindow and require(VaultWindow)
-                if WindowModule then
-                    Old = WindowModule.Start
-                    if NoDelay.Enabled then
-                        setconstant(Old, 5, 0)
+                local Scripts
+                local VaultWindow
+                local Action
+                repeat
+                    Scripts = SafeRef(Plr, {"Backpack", "Scripts"})
+                    VaultWindow = Scripts and SafeRef(Scripts, {"GlobalSurvivor", "Action", "VaultWindow"})
+                    Action = SafeRef(Scripts, {"values", "Action"})
+                    WindowModule = VaultWindow and require(VaultWindow)
+                    task.wait()
+                until Scripts and VaultWindow and WindowModule and Action or not FastVaultModifier.Enabled
+
+                Old = WindowModule.Start
+                if NoDelay.Enabled then
+                    setconstant(Old, 5, 0)
+                end
+
+                WindowModule.Start = function(self, ...)
+                    if AllowAnyAngle.Enabled and CharacterLib.Alive then
+                        local Far = WindowModule.ActionInfo.Ports.Far
+                        local Close = WindowModule.ActionInfo.Ports.Close
+                        if Far and Close then
+                            local Start = vector.create(Close.Position.X, CharacterLib.Root.Position.Y, Close.Position.Z)
+                            local Target = vector.create(Far.Position.X, CharacterLib.Root.Position.Y, Far.Position.Z)
+                            CharacterLib.Root.CFrame = CFrame.lookAt(Start, Target)
+                        end
+
+                        if SpoofMoveDirection.Enabled then
+                            CharacterLib.Humanoid:Move(vector.create(1, 0, 0))
+                        end
                     end
 
-                    WindowModule.Start = VaultWindowHook
-
-                    FastVaultModifier:Clean(function()
-                        if Old then
-                            setconstant(Old, 5, 1.5)
-                        end
-                        WindowModule.Start = Old
-                        Old = nil
-                    end)
-                else
-                    Notify({Text = "Failed to find Window Module.\nWindow Modifiers will not work.", Duration = 5, Type = "Error"})
+                    return Old(self, ...)
                 end
 
-                local Action = SafeRef(Scripts, {"values", "Action"})
-                if Action then
-                    FastVaultModifier:Clean(Action:GetPropertyChangedSignal("Value"):Connect(function()
-                        if not NoDelay.Enabled then return end
-                        if Action.Value == "SlidingPallet" then
-                            Action.Value = "Nothing"
-                        end
-                    end))
-                else
-                    Notify({Text = "Failed to find Action State.\nPallet no delay will not work.", Duration = 5, Type = "Error"})
-                end
+                FastVaultModifier:Clean(Action:GetPropertyChangedSignal("Value"):Connect(function()
+                    if NoDelay.Enabled and Action.Value == "SlidingPallet" then
+                        Action.Value = "Nothing"
+                    end
+                end))
+
+                FastVaultModifier:Clean(function()
+                    if Old then
+                        setconstant(Old, 5, 1.5)
+                    end
+                    WindowModule.Start = Old
+                    Old = nil
+                    WindowModule = nil
+                end)
             end
         })
 
@@ -1192,7 +1279,7 @@ Run(function() -- Player
 
                                 while UIS:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) do
                                     if InfiniteUnbreakable.Disabled then break end
-                                    RunService.RenderStepped:Wait()
+                                    RunService.PreRender:Wait()
                                     if ProgressInfo and ActionText and ProgressBar then
                                         ProgressInfo.Visible = true
                                         ActionText.Text = "Recovering"
@@ -1264,7 +1351,7 @@ Run(function() -- Player
 
                                 while UIS:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) do
                                     if SelfCare.Disabled then break end
-                                    RunService.RenderStepped:Wait()
+                                    RunService.PreRender:Wait()
                                     if ProgressInfo and ActionText and ProgressBar then
                                         ProgressInfo.Visible = true
                                         ActionText.Text = "Healing"
@@ -1551,14 +1638,14 @@ Run(function() -- Other
         
         ServerSideDestroy = Other:CreateButton({
             Name = "ServerSideDestroy",
-            Info = "Allows you to destroy any instance you want\nYou must be playing as trapper for this to work",
+            Info = "Allows you to destroy any instance you want.\nYou must be playing as trapper for this to work.",
             Function = function()
                 if Object and Object.Parent then
                     local RemoteEvents = ReplicatedStorage:FindFirstChild("RemoteEvents")
                     local ServerEvent = RemoteEvents and RemoteEvents:FindFirstChild("Server_Event")
                     if ServerEvent then
                         ServerEvent:FireServer("Trap", "Grab", Object)
-                        Notify({Text = `Destroyed Object: {Object:GetFullName()}`})
+                        Notify({Text = `Destroyed Object: {CustomLocalMethods:GetFullName(Object)}`})
                     else
                         Notify({Text = "Failed to find event"})
                     end
@@ -1568,19 +1655,21 @@ Run(function() -- Other
             end
         })
 
-        local ObjectPathTextBox; ObjectPathTextBox = ServerSideDestroy:CreateTextBox({
+        ServerSideDestroy:CreateTextBox({
             Name = "Object",
-            PlaceholderText = "[Object Path]"
-        })
-        ObjectPathTextBox.Object.TextBox.FocusLost:Connect(function()
-            local f = loadstring(`return {ObjectPathTextBox.Object.TextBox.Text}`)
-            if typeof(f) == "function" then
-                Object = f()
-                Notify({Text = `Set instance path to {Object:GetFullName()}`})
-            else
-                Notify({Text = f})
+            PlaceholderText = "[Object Path]",
+            Function = function(Text)
+                if Text:match('%w+') then
+                    local f = loadstring(`return {Text}`)
+                    if typeof(f) == "function" then
+                        Object = f()
+                        Notify({Text = `Set instance path to {CustomLocalMethods:GetFullName(Object)}`})
+                    else
+                        Notify({Text = f})
+                    end
+                end
             end
-        end)
+        })
     end)
 
     Run(function() -- PingSpoofer
@@ -1799,7 +1888,7 @@ end)
 
 Run(function() -- Animations
     Run(function() -- EmotePlayer
-        local EmotePlayer, PointKeybind, FollowKeybind, CaliforniaGirlsKeybind, GetEmKeybind, ThinkKeybind, BowShotKeybind, Track
+        local EmotePlayer, PointKeybind, FollowKeybind, CaliforniaGirlsKeybind, GetEmKeybind, ThinkKeybind, BowShotKeybind, Track, OverwriteOtherKeys, ActionName
         local AnimationIds = {
             Point = {AnimationId = "rbxassetid://16520476888"},
             Follow = {AnimationId = "rbxassetid://16520472961", Keybind = FollowKeybind},
@@ -1831,62 +1920,111 @@ Run(function() -- Animations
             end
         end
 
+        local function RandomString()
+            local Array = {}
+            for i = 1, 10 do
+                Array[i] = string.char(math.random(32, 126))
+            end
+            return table.concat(Array)
+        end
+
+        local function KeyPress(_, State, Input)
+            if State == Enum.UserInputState.End or UIS:GetFocusedTextBox() then return end
+            for i, v in AnimationIds do
+                if Input.KeyCode.Name == v.Keybind.Keybind then
+                    PlayAnimation(i)
+                end
+            end
+        end
+        
+        local function UpdateAction()
+            local BindedKeys = {
+                Keys[PointKeybind.Keybind],
+                Keys[FollowKeybind.Keybind],
+                Keys[CaliforniaGirlsKeybind.Keybind],
+                Keys[GetEmKeybind.Keybind],
+                Keys[ThinkKeybind.Keybind],
+                Keys[BowShotKeybind.Keybind]
+            }
+            ContextActionService:BindActionAtPriority(`EmotePlayer{ActionName}`, KeyPress, false, 69420, unpack(Keys))
+        end
+
         EmotePlayer = Animations:CreateModule({
             Name = "Emote Player",
-            Info = "Allows you to bind all dead by roblox emotes to whatever keybind you want",
+            Info = "Allows you to bind dead by roblox emotes to different keys.",
             Function = function(Enabled)
                 if Enabled then
-                    EmotePlayer:Clean(UIS.InputBegan:Connect(function(Input)
-                        if UIS:GetFocusedTextBox() then return end
-                        for i, v in AnimationIds do
-                            if Input.KeyCode.Name == v.Keybind.Keybind then
-                                PlayAnimation(i)
-                            end
-                        end
-                    end))
+                    if OverwriteOtherKeys.Enabled then
+                        ActionName = RandomString()
+                        UpdateAction()
+                    else
+                        EmotePlayer:Clean(UIS.InputBegan:Connect(function(Input)
+                            KeyPress(nil, Input.UserInputState, Input)
+                        end))
+                    end
                 else
-                    for i, v in Playing do
+                    for _, v in Playing do
                         v:Stop()
                     end
                     table.clear(Playing)
+                    if ActionName then
+                        ContextActionService:UnbindAction(ActionName)
+                        ActionName = nil
+                    end
                 end
             end
         })
 
+        OverwriteOtherKeys = EmotePlayer:CreateToggle({
+            Name = 'Overwrite Other Keys',
+            Function = function()
+                if EmotePlayer.Enabled then
+                    EmotePlayer:Toggle(true)
+                    EmotePlayer:Toggle(true)
+                end
+            end
+        })
+
+        local function Update()
+            if EmotePlayer.Enabled then
+                UpdateAction()
+            end
+        end
+
         PointKeybind = EmotePlayer:CreateKeybind({
             Name = "Point",
             Keybind = "One",
-            Hold = false,
+            Function = Update
         })
 
         FollowKeybind = EmotePlayer:CreateKeybind({
             Name = "Follow",
             Keybind = "Two",
-            Hold = false,
+            Function = Update
         })
 
         CaliforniaGirlsKeybind = EmotePlayer:CreateKeybind({
             Name = "California Girls",
             Keybind = "Three",
-            Hold = false,
+            Function = Update
         })
 
         GetEmKeybind = EmotePlayer:CreateKeybind({
             Name = "Get Em",
             Keybind = "Four",
-            Hold = false,
+            Function = Update
         })
 
         ThinkKeybind = EmotePlayer:CreateKeybind({
             Name = "Think",
             Keybind = "Five",
-            Hold = false,
+            Function = Update
         })
 
         BowShotKeybind = EmotePlayer:CreateKeybind({
             Name = "Bow Shot",
             Keybind = "Six",
-            Hold = false,
+            Function = Update
         })
 
         AnimationIds.Point.Keybind = PointKeybind
@@ -1897,205 +2035,3 @@ Run(function() -- Animations
         AnimationIds.BowShot.Keybind = BowShotKeybind
     end)
 end)
-
---[[ random dead by roblox remotes
-    ---------- Pick Up Player (Works With Survivor) ----------
-
-    local args = {
-        "Carry",
-        "Pickup_Default",
-        Player,
-    }
-    game:GetService("ReplicatedStorage"):WaitForChild("RemoteEvents"):WaitForChild("Server_Event"):FireServer(unpack(args))
-
-    ---------- Codes Module
-
-    game:GetService("ReplicatedStorage").Modules.Data.Codes
-
-    ---------- Hook Sabotage Stuff
-    
-    local Hook = workspace.Hook5
-    
-    local args = {
-        {
-            D9v8 = {
-                C21 = game:GetService("Players").LocalPlayer:WaitForChild("Backpack"):WaitForChild("Scripts"):WaitForChild("values"):WaitForChild("Action"),
-                C20 = "Sabotaging",
-                C22 = "S101"
-            },
-            Bbh1O = {
-                C21 = game:GetService("Players").LocalPlayer:WaitForChild("Backpack"):WaitForChild("Scripts"):WaitForChild("values"):WaitForChild("Action"),
-                C20 = "Sabotaging",
-                C22 = "S101"
-            },
-            Dvh1O = {
-                C21 = game:GetService("Players").LocalPlayer:WaitForChild("Backpack"):WaitForChild("Scripts"):WaitForChild("values"):WaitForChild("Action"),
-                C20 = "Sabotaging",
-                C22 = "S101"
-            },
-            Dbh1O = {
-                C21 = game:GetService("Players").LocalPlayer:WaitForChild("Backpack"):WaitForChild("Scripts"):WaitForChild("values"):WaitForChild("Action"),
-                C20 = "Sabotaging",
-                C22 = "S101"
-            },
-            Dhv8 = {
-                C21 = game:GetService("Players").LocalPlayer:WaitForChild("Backpack"):WaitForChild("Scripts"):WaitForChild("values"):WaitForChild("Action"),
-                C20 = "Sabotaging",
-                C22 = "S101"
-            }
-        }
-    }
-    game:GetService("ReplicatedStorage"):WaitForChild("RemoteEvents"):WaitForChild("NewPropertie"):FireServer(unpack(args))
-
-    local args = {
-        {
-            D9v8 = {
-                C21 = Hook:WaitForChild("Panel"):WaitForChild("Sabotaging"),
-                C20 = game:GetService("Players").LocalPlayer,
-                C22 = "O101"
-            },
-            Bbh1O = {
-                C21 = Hook:WaitForChild("Panel"):WaitForChild("Sabotaging"),
-                C20 = game:GetService("Players").LocalPlayer,
-                C22 = "O101"
-            },
-            Dvh1O = {
-                C21 = Hook:WaitForChild("Panel"):WaitForChild("Sabotaging"),
-                C20 = game:GetService("Players").LocalPlayer,
-                C22 = "O101"
-            },
-            Dbh1O = {
-                C21 = Hook:WaitForChild("Panel"):WaitForChild("Sabotaging"),
-                C20 = game:GetService("Players").LocalPlayer,
-                C22 = "O101"
-            },
-            Dhv8 = {
-                C21 = Hook:WaitForChild("Panel"):WaitForChild("Sabotaging"),
-                C20 = game:GetService("Players").LocalPlayer,
-                C22 = "O101"
-            }
-        }
-    }
-    game:GetService("ReplicatedStorage"):WaitForChild("RemoteEvents"):WaitForChild("NewPropertie"):FireServer(unpack(args))
-
-    local args = {
-        {
-            D9v8 = {
-                C21 = game:GetService("Players").LocalPlayer.Character:WaitForChild("Gold_Toolbox"):WaitForChild("Using"),
-                C20 = true,
-                C22 = "B101"
-            },
-            Bbh1O = {
-                C21 = game:GetService("Players").LocalPlayer.Character:WaitForChild("Gold_Toolbox"):WaitForChild("Using"),
-                C20 = true,
-                C22 = "B101"
-            },
-            Dvh1O = {
-                C21 = game:GetService("Players").LocalPlayer.Character:WaitForChild("Gold_Toolbox"):WaitForChild("Using"),
-                C20 = true,
-                C22 = "B101"
-            },
-            Dbh1O = {
-                C21 = game:GetService("Players").LocalPlayer.Character:WaitForChild("Gold_Toolbox"):WaitForChild("Using"),
-                C20 = true,
-                C22 = "B101"
-            },
-            Dhv8 = {
-                C21 = game:GetService("Players").LocalPlayer.Character:WaitForChild("Gold_Toolbox"):WaitForChild("Using"),
-                C20 = true,
-                C22 = "B101"
-            }
-        }
-    }
-    game:GetService("ReplicatedStorage"):WaitForChild("RemoteEvents"):WaitForChild("NewPropertie"):FireServer(unpack(args))
-
-    task.wait(3)
-
-    local args = {
-        {
-            D9v8 = {
-                C21 = game:GetService("Players").LocalPlayer:WaitForChild("Backpack"):WaitForChild("Scripts"):WaitForChild("values"):WaitForChild("Action"),
-                C20 = "Nothing",
-                C22 = "S101"
-            },
-            Bbh1O = {
-                C21 = game:GetService("Players").LocalPlayer:WaitForChild("Backpack"):WaitForChild("Scripts"):WaitForChild("values"):WaitForChild("Action"),
-                C20 = "Nothing",
-                C22 = "S101"
-            },
-            Dvh1O = {
-                C21 = game:GetService("Players").LocalPlayer:WaitForChild("Backpack"):WaitForChild("Scripts"):WaitForChild("values"):WaitForChild("Action"),
-                C20 = "Nothing",
-                C22 = "S101"
-            },
-            Dbh1O = {
-                C21 = game:GetService("Players").LocalPlayer:WaitForChild("Backpack"):WaitForChild("Scripts"):WaitForChild("values"):WaitForChild("Action"),
-                C20 = "Nothing",
-                C22 = "S101"
-            },
-            Dhv8 = {
-                C21 = game:GetService("Players").LocalPlayer:WaitForChild("Backpack"):WaitForChild("Scripts"):WaitForChild("values"):WaitForChild("Action"),
-                C20 = "Nothing",
-                C22 = "S101"
-            }
-        }
-    }
-    game:GetService("ReplicatedStorage"):WaitForChild("RemoteEvents"):WaitForChild("NewPropertie"):FireServer(unpack(args))
-
-    local args = {
-        {
-            D9v8 = {
-                C21 = game:GetService("Players").LocalPlayer.Character:WaitForChild("Gold_Toolbox"):WaitForChild("Using"),
-                C20 = false,
-                C22 = "B101"
-            },
-            Bbh1O = {
-                C21 = game:GetService("Players").LocalPlayer.Character:WaitForChild("Gold_Toolbox"):WaitForChild("Using"),
-                C20 = false,
-                C22 = "B101"
-            },
-            Dvh1O = {
-                C21 = game:GetService("Players").LocalPlayer.Character:WaitForChild("Gold_Toolbox"):WaitForChild("Using"),
-                C20 = false,
-                C22 = "B101"
-            },
-            Dbh1O = {
-                C21 = game:GetService("Players").LocalPlayer.Character:WaitForChild("Gold_Toolbox"):WaitForChild("Using"),
-                C20 = false,
-                C22 = "B101"
-            },
-            Dhv8 = {
-                C21 = game:GetService("Players").LocalPlayer.Character:WaitForChild("Gold_Toolbox"):WaitForChild("Using"),
-                C20 = false,
-                C22 = "B101"
-            }
-        }
-    }
-    game:GetService("ReplicatedStorage"):WaitForChild("RemoteEvents"):WaitForChild("NewPropertie"):FireServer(unpack(args))
-
-    local args = {
-        {
-            D9v8 = {
-                C21 = Hook:WaitForChild("Panel"):WaitForChild("Sabotaging"),
-                C22 = "O101"
-            },
-            Bbh1O = {
-                C21 = Hook:WaitForChild("Panel"):WaitForChild("Sabotaging"),
-                C22 = "O101"
-            },
-            Dvh1O = {
-                C21 = Hook:WaitForChild("Panel"):WaitForChild("Sabotaging"),
-                C22 = "O101"
-            },
-            Dbh1O = {
-                C21 = Hook:WaitForChild("Panel"):WaitForChild("Sabotaging"),
-                C22 = "O101"
-            },
-            Dhv8 = {
-                C21 = Hook:WaitForChild("Panel"):WaitForChild("Sabotaging"),
-                C22 = "O101"
-            }
-        }
-    }
-    game:GetService("ReplicatedStorage"):WaitForChild("RemoteEvents"):WaitForChild("NewPropertie"):FireServer(unpack(args))
-]]

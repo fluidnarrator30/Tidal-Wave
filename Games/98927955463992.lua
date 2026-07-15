@@ -7,6 +7,7 @@ end
 local TidalWave = shared.TidalWave
 local Categories = TidalWave.Categories
 local CharacterLib = TidalWave.Libraries.CharacterLib
+local CustomLocalMethods = TidalWave.Libraries.CustomLocalMethods
 
 local Combat = Categories.Combat
 
@@ -17,82 +18,118 @@ local RunService = GetService("RunService")
 local Plr = Players.LocalPlayer
 local Backpack = Plr:FindFirstChildOfClass("Backpack")
 
+local function GetTableLength(Tab)
+	local Len = 0
+	for _ in Tab do
+		Len += 1
+	end
+	return Len
+end
+
 do
     local ProjectileAura, HitCooldown, AutoEquipGun, MaxDistance, Bullets, CachedGun
 
-    local ZombiesLocal = workspace:WaitForChild("Zombies_Local", 9999)
-    local GunHit = ReplicatedStorage:WaitForChild("GunRemotes", 9999):WaitForChild("GunHit", 9999)
+    local ZombiesLocal: Folder = workspace:WaitForChild("Zombies_Local", 9999)
+    local GunHit: RemoteEvent = ReplicatedStorage:WaitForChild("GunRemotes", 9999):WaitForChild("GunHit", 9999)
 
     local Zombies = {}
+    local HitZombies = {}
 
     local function GetZombieId(Zombie)
         return tonumber(Zombie.Name:match("%d+"))
     end
 
-    local function GetClosestZombie()
-        local ClosestZombie, ClosestZombieRoot
-        local ClosestZombieDistance = MaxDistance.Value
-        for _, Zombie in Zombies do
+    local function GetClosestZombies()
+        local ClosestZombies = {}
+        local Clock = os.clock()
+        for Zombie in Zombies do
+            local TimeHit = HitZombies[Zombie]
+            if TimeHit then
+                if Clock >= TimeHit then
+                    HitZombies[Zombie] = nil
+                else
+                    continue
+                end
+            end
             local Root = Zombie:FindFirstChild("HumanoidRootPart")
             if not Root then continue end
-            local Head = Zombie:FindFirstChild("Head")
-            if Head and Head.Transparency > 0 then continue end
-            local Distance = (Root.Position - CharacterLib.Root.Position).Magnitude
-            if Distance < ClosestZombieDistance then
-                ClosestZombie = Zombie
-                ClosestZombieRoot = Root
-                ClosestZombieDistance = Distance
+            local Head = CustomLocalMethods:FindFirstChildOfClassWithName(Zombie, "Part", "Head")
+            if Head and Head.Transparency == 0 then
+                local Distance = (Root.Position - CharacterLib.Root.Position).Magnitude
+                if Distance <= MaxDistance.Value then
+                    ClosestZombies[#ClosestZombies + 1] = {
+                        Character = Zombie,
+                        Root = Root,
+                        Head = Head,
+                        Distance = Distance
+                    }
+                end
             end
         end
-        return ClosestZombie, ClosestZombieRoot
+
+        table.sort(ClosestZombies, function(a, b)
+            return a.Distance < b.Distance
+        end)
+
+        return ClosestZombies
     end
 
     ProjectileAura = Combat:CreateModule({
-        Name = "Projectile Aura",
+        Name = "ProjectileAura",
         Function = function(Enabled)
             if Enabled then
                 for _, Zombie in ZombiesLocal:GetChildren() do
-                    table.insert(Zombies, Zombie)
+                    Zombies[Zombie] = true
                 end
 
                 ProjectileAura:Clean(ZombiesLocal.ChildAdded:Connect(function(Zombie)
-                    table.insert(Zombies, Zombie)
+                    Zombies[Zombie] = true
                 end))
                 ProjectileAura:Clean(ZombiesLocal.ChildRemoved:Connect(function(Zombie)
-                    local Index = table.find(Zombies, Zombie)
-                    if Index then
-                        table.remove(Zombies, Index)
-                    end
+                    Zombies[Zombie] = nil
+                    HitZombies[Zombie] = nil
                 end))
 
-                repeat
-                    if not CharacterLib.Alive then task.wait() continue end
-                    local Gun = (CachedGun ~= nil and CachedGun.Parent ~= nil and CachedGun) or CharacterLib.Character:FindFirstChildOfClass("Tool")
-                    if not Gun and AutoEquipGun.Enabled then
-                        local BackpackedGun = Backpack:FindFirstChildOfClass("Tool")
-                        if BackpackedGun then
-                            CharacterLib.Humanoid:EquipTool(BackpackedGun)
+                local Tool
+
+                local function EquipTool()
+                    if not Tool or (Tool and Tool.Parent == nil) or (Tool and Tool.Parent == Backpack) then
+                        Tool = CharacterLib.Character:FindFirstChildOfClass("Tool")
+                        if not Tool and AutoEquipGun.Enabled then
+                            local BackpackedTool = Backpack:FindFirstChildOfClass("Tool")
+                            if BackpackedTool then
+                                Tool = BackpackedTool
+                                CharacterLib.Humanoid:EquipTool(BackpackedTool)
+                                task.wait()
+                            end
                         end
                     end
+                end
 
-                    if not Gun then task.wait() continue end
+                while ProjectileAura.Enabled and task.wait() do
+                    if CharacterLib.Alive then
+                        EquipTool()
 
-                    if not CachedGun or CachedGun.Parent == nil then
-                        CachedGun = Gun
+                        if Tool then
+                            local ClosestZombies = GetClosestZombies()
+                            if #ClosestZombies == 0 then continue end
+
+                            print(#ClosestZombies)
+
+                            local Index = 0
+
+                            for _, Zombie in ClosestZombies do
+                                Index += 1
+                                if Index >= Bullets.Value then break end
+                                GunHit:FireServer(Tool.Name, GetZombieId(Zombie.Character), Zombie.Root.Position)
+                                HitZombies[Zombie.Character] = os.clock() + HitCooldown.Value
+                            end
+                        end
                     end
-
-                    local ClosestZombie, ClosestZombieRoot = GetClosestZombie()
-
-                    if not (ClosestZombie and ClosestZombieRoot) then task.wait() continue end
-
-                    for _ = 1, Bullets.Value do
-                        GunHit:FireServer(Gun.Name, GetZombieId(ClosestZombie), ClosestZombieRoot.Position)
-                    end
-
-                    task.wait(HitCooldown.Value)
-                until not ProjectileAura.Enabled
+                end
             else
                 table.clear(Zombies)
+                table.clear(HitZombies)
             end
         end
     })
@@ -110,15 +147,15 @@ do
 
     AutoEquipGun = ProjectileAura:CreateToggle({
         Name = "Auto Equip Gun",
-        Info = "Automatically equips your gun when enabling projectile aura",
+        Info = "Automatically equips your gun.",
         Default = true
     })
 
     MaxDistance = ProjectileAura:CreateSlider({
         Name = "Max Distance",
-        Default = 250,
+        Default = 130,
         Min = 1,
-        Max = 250
+        Max = 130
     })
 
     Bullets = ProjectileAura:CreateSlider({

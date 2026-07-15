@@ -10,7 +10,6 @@ local CharacterLib = TidalWave.Libraries.CharacterLib
 local Drawing = TidalWave.Libraries.Drawing
 
 local Players: Players = GetService("Players")
-local TweenService: TweenService = GetService("TweenService")
 local RunService: RunService = GetService("RunService")
 local ReplicatedStorage: ReplicatedStorage = GetService("ReplicatedStorage")
 local UIS: UserInputService = GetService("UserInputService")
@@ -19,7 +18,6 @@ local Plr = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
 local Combat = Categories.Combat
-local Other = Categories.Other
 
 local function Notify(Properties)
     TidalWave:Notify(Properties)
@@ -34,15 +32,15 @@ local function NotifyPoopSploit(Function)
     })
 end
 
-local function Run(f)
-    f()
-end
+do
+    do
+        local SilentAimbot, WallCheck, Part, Fov, Circle, CircleObject, OutlineObject, OutlineColor, FillColor, OutlineTransparency, FillTransparency, Thickness, Old
 
-local setupvalue = debug.setupvalue or setupvalue
-
-Run(function() -- Combat
-    Run(function()
-        local SilentAimbot, WallCheck, WallBang, Part, Fov, Old, Circle, CircleObject, OutlineObject, OutlineColor, FillColor, OutlineTransparency, FillTransparency, Thickness
+        local function UpdateCirclePosition()
+            if CircleObject then
+                CircleObject.Position = UIS:GetMouseLocation()
+            end
+        end
 
         local function CreateCircle()
             CircleObject = Drawing.new("Circle")
@@ -66,43 +64,40 @@ Run(function() -- Combat
 
         SilentAimbot = Combat:CreateModule({
             Name = "SilentAimbot",
-            Info = "Silently adjusts your aim towards the nearest target",
+            Info = "Silently Adjusts your aim towards the nearest player",
             Enabled = function()
-                if not setupvalue then NotifyPoopSploit("getupvalue") return end
-                local BlasterController = require(ReplicatedStorage.Blaster.Scripts.BlasterController)
-
-                local Proxy = newproxy(true)
-                getmetatable(Proxy).__index = function()
-                    local Character, Vector = CharacterLib:GetCharacterWithinMouse({
-                        Part = Part.Value,
-                        Range = Fov.Value,
-                        Origin = Camera.CFrame.Position,
-                        WallCheck = WallCheck.Enabled,
-                        NPCS = false,
-                        Players = true
-                    })
-
-                    if Character then
-                        return CFrame.lookAt(Camera.CFrame.Position, Character[Part.Value].Position)
-                    end
-
-                    return Camera.CFrame
-                end
-                setupvalue(BlasterController.shoot, 3, Proxy)
-
                 if Circle.Enabled and not CircleObject then
                     CreateCircle()
                 end
 
-                SilentAimbot:Clean(RunService.RenderStepped:Connect(function()
-                    if CircleObject then
-                        CircleObject.Position = UIS:GetMouseLocation()
+                SilentAimbot:Clean(RunService.PreRender:Connect(UpdateCirclePosition))
+
+                local BaseWeapon = require(ReplicatedStorage.WeaponsSystem.Libraries.BaseWeapon)
+
+                Old = BaseWeapon.fire
+
+                BaseWeapon.fire = function(Tab, Origin, Direction, a)
+                    local Character = CharacterLib:GetCharacterWithinMouse({
+                        Part = Part.Value,
+                        Range = Fov.Value,
+                        WallCheck = WallCheck.Enabled,
+                        Origin = Origin,
+                        Players = true
+                    })
+
+                    if Character then
+                        return Old(Tab, Origin, (Character[Part.Value].Position - Origin).Unit, a)
                     end
-                end))
+                    
+                    return Old(Tab, Origin, Direction, a)
+                end
 
                 SilentAimbot:Clean(function()
                     RemoveCircle()
-                    setupvalue(BlasterController.shoot, 3, Camera)
+                    if Old then
+                        BaseWeapon.fire = Old
+                        Old = nil
+                    end
                 end)
             end
         })
@@ -110,9 +105,6 @@ Run(function() -- Combat
         WallCheck = SilentAimbot:CreateToggle({
             Name = "WallCheck",
             Info = "Ignores players behind walls",
-            Function = function(Enabled)
-                WallBang:SetVisible(not Enabled)
-            end
         })
 
         Part = SilentAimbot:CreateDropdown({
@@ -128,7 +120,7 @@ Run(function() -- Combat
                 else
                     RemoveCircle()
                 end
-                for i, v in {Fov, Thickness, OutlineTransparency, FillTransparency, OutlineColor, FillColor} do
+                for _, v in {Fov, Thickness, OutlineTransparency, FillTransparency, OutlineColor, FillColor} do
                     v:SetVisible(Enabled)
                 end
             end
@@ -196,29 +188,5 @@ Run(function() -- Combat
             Visible = false,
             Function = UpdateCircle
         })
-    end)
-end)
-
-Run(function() -- Other
-    Run(function()
-        local NoRecoil, Old
-        
-        NoRecoil = Other:CreateModule({
-            Name = "NoRecoil",
-            Info = "Removes recoil when shooting your gun",
-            Enabled = function()
-                local BlasterController = require(ReplicatedStorage.Blaster.Scripts.BlasterController)
-                Old = BlasterController.recoil
-                BlasterController.recoil = function()
-                    return nil
-                end
-
-                NoRecoil:Clean(function()
-                    if Old then
-                        BlasterController.recoil = Old
-                    end
-                end)
-            end
-        })
-    end)
-end)
+    end
+end

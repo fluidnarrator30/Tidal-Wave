@@ -1,8 +1,3 @@
-local TidalWave = shared.TidalWave
-local Categories = TidalWave.Categories
-local CharacterLib = TidalWave.Libraries.CharacterLib
-local CustomLocalMethods = TidalWave.Libraries.CustomLocalMethods
-
 local cloneref = cloneref or function(Obj) return Obj end
 
 local function GetService(Service)
@@ -14,6 +9,12 @@ local RunService: RunService = GetService("RunService")
 local ReplicatedStorage: ReplicatedStorage = GetService("ReplicatedStorage")
 local PathfindingService: PathfindingService = GetService("PathfindingService")
 local TweenService: TweenService = GetService("TweenService")
+
+local TidalWave = shared.TidalWave
+local Categories = TidalWave.Categories
+local CharacterLib = TidalWave.Libraries.CharacterLib
+local CustomLocalMethods = TidalWave.Libraries.CustomLocalMethods
+local Modules = TidalWave.Modules
 
 local Plr = Players.LocalPlayer
 
@@ -52,19 +53,8 @@ local function Run(f)
     f()
 end
 
-local function SafeRef(Obj, Ref)
-    if not Obj then return nil end
-    
-    for _, v in Ref do
-        local NewObj = if typeof(v) == "string" then Obj:FindFirstChild(v) else if v[2] then Obj:FindFirstChildWhichIsA(v[1]) else Obj:FindFirstChildOfClass(v[1])
-        if NewObj then
-            Obj = NewObj
-        else
-            return nil
-        end
-    end
-
-    return Obj
+local function SafeRef(Obj, Path)
+    return CustomLocalMethods:SafeRef(Obj, Path)
 end
 
 local function IsBeast(Player)
@@ -158,6 +148,52 @@ Run(function() -- Combat
             Min = 1,
             Max = 10
         })
+
+        WallCheck = KillAura:CreateToggle({
+            Name = "Wall Check",
+            Default = true
+        })
+    end)
+
+    Run(function() -- KillAuraOthers
+        local KillAuraOthers, Range, WallCheck
+
+        KillAuraOthers = Combat:CreateModule({
+            Name = "KillAuraOthers",
+            Enabled = function()
+                repeat
+                    local Beast = GetBeast()
+                    local BeastChar = Beast and CharacterLib:FindCharacter(Beast)
+                    if BeastChar then
+                        local Character = CharacterLib:GetClosestCharacter({
+                            Origin = BeastChar.Root.Position,
+                            Range = Range.Value,
+                            WallCheck = WallCheck.Enabled
+                        })
+                        if Character then
+                            local Hammer = BeastChar.Character:FindFirstChild("Hammer")
+                            local HammerEvent = Hammer and Hammer:FindFirstChild("HammerEvent")
+                            if HammerEvent then
+                                HammerEvent:FireServer("HammerHit", Character.Root)
+                            end
+                        end
+                    end
+                    task.wait(0.05)
+                until not KillAuraOthers.Enabled
+            end,
+        })
+
+        Range = KillAuraOthers:CreateSlider({
+            Name = "Range",
+            Default = 5,
+            Min = 1,
+            Max = 10
+        })
+
+        WallCheck = KillAuraOthers:CreateToggle({
+            Name = "Wall Check",
+            Default = true
+        })
     end)
 end)
 
@@ -174,8 +210,10 @@ Run(function() -- Player
                 if Enabled then
                     repeat
                         DisableCrawl = SafeRef(Plr, {"TempPlayerStatsModule", "DisableCrawl"})
-                        task.wait(0.05)
+                        task.wait()
                     until DisableCrawl or not BeastCrawl.Enabled
+
+                    if not BeastCrawl.Enabled then return end
 
                     DisableCrawl.Value = false
                     DisableCrawl:GetPropertyChangedSignal("Value"):Connect(function()
@@ -183,8 +221,9 @@ Run(function() -- Player
                     end)
 
                     BeastCrawl:Clean(workspace.DescendantAdded:Connect(function(Child)
-                        if Child:IsA("BasePart") and Child.CollisionGroup == 'VENT' then
+                        if Child:IsA("BasePart") and Child.CollisionGroup == 'VENT' and Child.CanCollide then
                             Child.CanCollide = false
+                            ModifiedParts[Child] = true
                         end
                     end))
 
@@ -196,13 +235,13 @@ Run(function() -- Player
                     end
                 else
                     if DisableCrawl then
-                        local IsBeast = SafeRef(Plr, {"TempPlayerStatsModule", "IsBeast"})
-                        DisableCrawl.Value = IsBeast and IsBeast.Value
+                        DisableCrawl.Value = IsBeast()
                     end
                     for Part in ModifiedParts do
                         Part.CanCollide = true
                     end
                     table.clear(ModifiedParts)
+                    DisableCrawl = nil
                 end
             end,
         })
@@ -402,7 +441,7 @@ end)
 
 Run(function() -- Other
     Run(function() -- CustomBeastMusic
-        local CustomBeastMusic, Volume, MusicId, SoundObject, RollOffMinDistance, RollOffMaxDistance
+        local CustomBeastMusic, Volume, MusicId, SoundObject, HeartbeatObject, RollOffMinDistance, RollOffMaxDistance, HeartbeatVolume
 
         local function SetId(Custom)
             if not SoundObject then return end
@@ -425,6 +464,7 @@ Run(function() -- Other
 
         local function OnCharacterAdded(Character)
             local Music = SafeRef(Character.Character, {"Hammer", "Handle", "SoundChaseMusic"})
+            local Heartbeat = SafeRef(Character.Character, {"Hammer", "Handle", "SoundHeartBeat"})
 
             if not Music then
                 local TimeOut = os.clock() + 5
@@ -434,10 +474,23 @@ Run(function() -- Other
                 until Music or not CustomBeastMusic.Enabled or os.clock() >= TimeOut
             end
 
+            if not Heartbeat then
+                local TimeOut = os.clock() + 5
+                repeat
+                    Heartbeat = SafeRef(Character.Character, {"Hammer", "Handle", "SoundHeartBeat"})
+                    task.wait()
+                until Heartbeat or not CustomBeastMusic.Enabled or os.clock() >= TimeOut
+            end
+
             if Music and CustomBeastMusic.Enabled then
+                Music = Music
+                Music.Volume = Volume.Value
                 SoundObject = Music
-                SoundObject.Volume = Volume.Value
                 SetId()
+            end
+            if Heartbeat and CustomBeastMusic.Enabled then
+                Heartbeat.Volume = HeartbeatVolume.Value
+                HeartbeatObject = Heartbeat
             end
         end
 
@@ -446,8 +499,8 @@ Run(function() -- Other
             Info = "Allows you to change the beast music volume and set a custom ID.\nDefault beast music id is 1846863084.",
             Function = function(Enabled)
                 if Enabled then
-                    if TidalWave.Modules.ChaseMusic.Enabled then
-                        TidalWave.Modules.ChaseMusic:Toggle(true)
+                    if Modules.TerrorRadius.Enabled then
+                        Modules.TerrorRadius:Toggle(true)
                     end
                     for _, Character in CharacterLib.List do
                         task.spawn(OnCharacterAdded, Character)
@@ -456,6 +509,10 @@ Run(function() -- Other
                 else
                     SetId("rbxassetid://1846863084")
                     SoundObject = nil
+                    if HeartbeatObject then
+                        HeartbeatObject.Volume = 1.9
+                        HeartbeatObject = nil
+                    end
                 end
             end,
         })
@@ -502,6 +559,19 @@ Run(function() -- Other
             Function = function(Val)
                 if SoundObject then
                     SoundObject.RollOffMaxDistance = Val
+                end
+            end
+        })
+
+        HeartbeatVolume = CustomBeastMusic:CreateSlider({
+            Name = "Heartbeat Volume",
+            Default = 1.9,
+            Min = 0,
+            Max = 10,
+            Decimal = 100,
+            Function = function(Val)
+                if HeartbeatObject then
+                    HeartbeatObject.Volume = Val
                 end
             end
         })
@@ -794,6 +864,523 @@ Run(function() -- Other
             Min = 0,
             Max = 20,
             Decimal = 10,
+        })
+    end)
+
+    Run(function() -- Bot
+        local Bot, StatusLabel
+        local Path = PathfindingService:CreatePath({
+            AgentCanClimb = true,
+            AgentRadius = 2.5,
+            Costs = {
+                Door = 0,
+            },
+        })
+        local CapturedPlayers, PathfindingModifiers = {}, {}
+
+        local function AddFreezePod(FreezePod)
+            if FreezePod.Name:find("FreezePod") then
+                local PodTrigger = FreezePod:WaitForChild("PodTrigger", 5)
+                if not Bot.Enabled then return end
+                local CapturedTorso = PodTrigger and PodTrigger:WaitForChild("CapturedTorso", 5)
+                local CapturedPlayer
+
+                local function Changed()
+                    if CapturedTorso.Value then
+                        local Player = Players:GetPlayerFromCharacter(CapturedTorso.Value.Parent)
+                        if Player then
+                            CapturedPlayer = Player
+                            CapturedPlayers[#CapturedPlayers + 1] = {
+                                Player = Player,
+                                FreezePod = FreezePod,
+                                Trigger = PodTrigger
+                            }
+                        end
+                    elseif CapturedPlayer then
+                        for i, v in CapturedPlayers do
+                            if v.Player == CapturedPlayer then
+                                table.remove(CapturedPlayers, i)
+                                break
+                            end
+                        end
+                    end
+                end
+
+                if CapturedTorso and Bot.Enabled then
+                    CapturedTorso:GetPropertyChangedSignal("Value"):Connect(Changed)
+                    Changed()
+                end
+            end
+        end
+
+        local function AddDoor(Door)
+            if Door.Name:find("Door") then
+                local DoorTrigger = Door:WaitForChild("DoorTrigger", 5)
+                if DoorTrigger and Bot.Enabled then
+                    local PathfindingModifier = Instance.new("PathfindingModifier")
+                    PathfindingModifier.PassThrough = true
+                    PathfindingModifier.Label = "Door"
+                    PathfindingModifier.Parent = Door
+                    PathfindingModifiers[#PathfindingModifiers + 1] = PathfindingModifier
+                end
+            end
+        end
+
+        local function Add(Obj)
+            AddFreezePod(Obj)
+            AddDoor(Obj)
+        end
+
+        local function IdentifyTask()
+            if IsBeast() then
+                
+            else
+                if #CapturedPlayers > 0 then
+                    return "Save"
+                elseif ReplicatedStorage.GameStatus.Value == "FIND AN EXIT" then
+                    return "Exit"
+                elseif ReplicatedStorage.ComputersLeft.Value > 0 then
+                    return "Computer"
+                end
+            end
+            return "None"
+        end
+
+        local function IsGameActive()
+            return if IsBeast() then ReplicatedStorage.IsGameActive.Value else ReplicatedStorage.GameStatus.Value == "15 SEC HEAD START" or ReplicatedStorage.IsGameActive.Value
+        end
+
+        local function GetClosestComputers(Map)
+            local Tab = {}
+            for i, v in Map:GetChildren() do
+                if v.Name == "ComputerTable" then
+                    if v.PrimaryPart then
+                        table.insert(Tab, {
+                            Computer = v,
+                            Magnitude = (CharacterLib.Root.Position - v.PrimaryPart.Position).Magnitude
+                        })
+                    else
+                        warn(`Failed to find primary part for computer: "{v:GetFullName()}"`)
+                    end
+                end
+            end
+
+            table.sort(Tab, function(a, b)
+                return a.Magnitude < b.Magnitude
+            end)
+
+            local NewTab = {}
+            for i, v in Tab do
+                NewTab[i] = v.Computer
+            end
+
+            return NewTab
+        end
+
+        local function GetClosestExits(Map)
+            local Tab = {}
+            for i, v in Map:GetChildren() do
+                if v.Name == "ExitDoor" then
+                    local Trigger = v:FindFirstChild("ExitDoorTrigger")
+                    if Trigger then
+                        table.insert(Tab, {
+                            Exit = v,
+                            Magnitude = (CharacterLib.Root.Position - Trigger.Position).Magnitude
+                        })
+                    else
+                        warn(`Failed to find trigger for exit door: "{GetFullName(v)}"`)
+                    end
+                end
+            end
+
+            table.sort(Tab, function(a, b)
+                return a.Magnitude < b.Magnitude
+            end)
+
+            local NewTab = {}
+            for i, v in Tab do
+                NewTab[i] = v.Exit
+            end
+
+            return NewTab
+        end
+
+        local function AnyAlive()
+            local AnyAlive = false
+
+            for _, Player in Players:GetPlayers() do
+                if Player == Plr then continue end
+                local Health = SafeRef(Player, {"TempPlayerStatsModule", "Health"})
+                if Health and Health.Value > 0 then
+                    AnyAlive = true
+                    break
+                end
+            end
+
+            return AnyAlive
+        end
+
+        local Tasks = {
+            Save = function()
+                StatusLabel.Text = `Status: Creating path to go save @{CapturedPlayers[1].Player.Name}`
+
+                local Beast = GetBeast()
+                local Char = CharacterLib:FindCharacter(Beast)
+
+                if Char and (CapturedPlayers[1].Trigger.Position - Char.Root.Position).Magnitude > 50 then
+                    Path:ComputeAsync(CharacterLib.Root.Position, CapturedPlayers[1].Trigger.Position)
+
+                    if Path.Status == Enum.PathStatus.Success then
+                        StatusLabel.Text = `Status: Successfully created path to @{CapturedPlayers[1].Player.Name}`
+
+                        local Waypoints = Path:GetWaypoints()
+
+                        local Success = true
+                        local BeastCameBack = false
+
+                        for i, Waypoint in Waypoints do
+                            local Part = Instance.new("Part")
+                            Part.Anchored = true
+                            Part.CanCollide = false
+                            Part.CanQuery = false
+                            Part.Material = Enum.Material.Neon
+                            Part.Size = vector.create(1, 1, 1)
+                            Part.Position = Waypoint.Position + vector.create(0, 0.5, 0)
+                            Part.Shape = Enum.PartType.Ball
+                            Part.Parent = workspace
+
+                            StatusLabel.Text = `Status: Moving to: {Waypoint.Position}`
+
+                            if Waypoint.Action == Enum.PathWaypointAction.Jump then
+                                CharacterLib.Humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+                            end
+
+                            while CharacterLib.Alive and #CapturedPlayers == 0 and Bot.Enabled and (CharacterLib.Root.Position - Waypoint.Position).Magnitude > 4 do
+                                if (CapturedPlayers[1].Trigger.Position - Char.Root.Position).Magnitude <= 50 then
+                                    BeastCameBack = true
+                                    break
+                                else
+                                    CharacterLib.Humanoid:MoveTo(Waypoint.Position)
+                                    StatusLabel.Text = "Status: Waiting for Move to finish..."
+                                end
+                                task.wait()
+                            end
+
+                            Part:Destroy()
+
+                            if BeastCameBack then
+                                StatusLabel.Text = "Status: Beast went back to the freeze pod waiting for them to leave..."
+                                Success = false
+                                break
+                            else
+                                StatusLabel.Text = "Status: Move finished"
+
+                                if i == #Waypoints then
+                                    while not (Plr.PlayerGui.ScreenGui.ActionBox.Visible and Plr.PlayerGui.ScreenGui.ActionBox.Text == "Free") and #CapturedPlayers == 0 and Bot.Enabled do
+                                        StatusLabel.Text = "Status: Waiting for freeze pod prompt..."
+                                        task.wait()
+                                    end
+                                    StatusLabel.Text = "Status: Found freeze pod prompt waiting 0.25 seconds..."
+                                    task.wait(0.25)
+                                end
+                                
+                                if not Bot.Enabled or #CapturedPlayers > 0 then
+                                    Success = false
+                                    break
+                                end
+                            end
+                        end
+
+                        if Success then
+                            StatusLabel.Text = `Status: Saved @{CapturedPlayers[1].Player.Name}`
+                            ReplicatedStorage.RemoteEvent:FireServer("Input", "Action", true)
+                            task.wait(0.1)
+                            ReplicatedStorage.RemoteEvent:FireServer("Input", "Action", false)
+                        end
+                    end
+                else
+                    StatusLabel.Text = `Status: Waiting for beast to leave...`
+                end
+            end,
+            Exit = function(Map)
+                local ClosestExits = GetClosestExits(Map)
+
+                if #ClosestExits > 0 then
+                    StatusLabel.Text = `Status: Creating path to exit...`
+                    Path:ComputeAsync(CharacterLib.Root.Position, ClosestExits[1].ExitDoorTrigger.Position)
+
+                    if Path.Status == Enum.PathStatus.Success then
+                        local Waypoints = Path:GetWaypoints()
+
+                        local Success = true
+
+                        for i, Waypoint in Waypoints do
+                            local Part = Instance.new("Part")
+                            Part.Anchored = true
+                            Part.CanCollide = false
+                            Part.CanQuery = false
+                            Part.Material = Enum.Material.Neon
+                            Part.Size = vector.create(1, 1, 1)
+                            Part.Position = Waypoint.Position + vector.create(0, 0.5, 0)
+                            Part.Shape = Enum.PartType.Ball
+                            Part.Parent = workspace
+
+                            StatusLabel.Text = `Status: Moving to: {Waypoint.Position}`
+
+                            if Waypoint.Action == Enum.PathWaypointAction.Jump then
+                                CharacterLib.Humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+                            end
+
+                            while CharacterLib.Alive and #CapturedPlayers == 0 and Bot.Enabled and (CharacterLib.Root.Position - Waypoint.Position).Magnitude > 4 do
+                                CharacterLib.Humanoid:MoveTo(Waypoint.Position)
+                                StatusLabel.Text = "Status: Waiting for Move to finish..."
+                                task.wait()
+                            end
+
+                            Part:Destroy()
+
+                            StatusLabel.Text = "Status: Move finished"
+
+                            if i == #Waypoints then
+                                while not (Plr.PlayerGui.ScreenGui.ActionBox.Visible and Plr.PlayerGui.ScreenGui.ActionBox.Text == "Free") and #CapturedPlayers == 0 and Bot.Enabled do
+                                    StatusLabel.Text = "Status: Waiting for exit door prompt..."
+                                    task.wait()
+                                end
+                                StatusLabel.Text = "Status: Found exit door prompt waiting 0.25 seconds..."
+                                task.wait(0.25)
+                            end
+                            
+                            if not Bot.Enabled or #CapturedPlayers > 0 then
+                                Success = false
+                                break
+                            end
+                        end
+
+                        local AnyPlayersAlive = AnyAlive()
+
+                        if Success then
+                            StatusLabel.Text = `Status: Opening exit door...`
+                            ReplicatedStorage.RemoteEvent:FireServer("Input", "Action", true)
+                            task.wait(0.1)
+                            ReplicatedStorage.RemoteEvent:FireServer("Input", "Action", false)
+
+                            if AnyPlayersAlive then
+                                StatusLabel.Text = `Status: Waiting for everyone to leave...`
+                                repeat
+                                    AnyPlayersAlive = AnyAlive()
+                                    task.wait(0.05)
+                                until not AnyPlayersAlive
+
+                                StatusLabel.Text = `Status: Leaving...`
+                                CharacterLib.Humanoid:MoveTo(ClosestExits[1].ExitArea.Position)
+                            else
+                                StatusLabel.Text = `Status: Leaving...`
+                                CharacterLib.Humanoid:MoveTo(ClosestExits[1].ExitArea.Position)
+                            end
+                        end
+                    end
+                end
+            end,
+            Computer = function(Map)
+                StatusLabel.Text = "Status: Finding closest computers..."
+                local ClosestComputers = GetClosestComputers(Map)
+
+                local Trigger
+                local Found = false
+
+                for _, v in ClosestComputers do
+                    local Screen = v:FindFirstChild("Screen")
+                    if Screen and Screen.Color == Color3.fromRGB(40, 127, 71) or not Screen then continue end
+                    for i = 1, 3 do
+                        local Taken = false
+                        for _, Char in CharacterLib.List do
+                            if (Char.Root.Position - v[`ComputerTrigger{i}`].Position).Magnitude < 3 then
+                                Taken = true
+                            end
+                        end
+                        if not Taken then
+                            Trigger = v[`ComputerTrigger{i}`]
+                            Found = true
+                            break
+                        end
+                    end
+                    if Found then break end
+                end
+
+                if Trigger and (CharacterLib.Root.Position - Trigger.Position).Magnitude > 0.5 then
+                    StatusLabel.Text = `Status: Creating path to  closest computer...`
+                    Path:ComputeAsync(CharacterLib.Root.Position, Trigger.Position)
+
+                    if Path.Status == Enum.PathStatus.Success then
+                        StatusLabel.Text = "Status: Successfully created path"
+                        local Success = true
+                        local Waypoints = Path:GetWaypoints()
+                        for i, Waypoint in Waypoints do
+                            local Part = Instance.new("Part")
+                            Part.Anchored = true
+                            Part.CanCollide = false
+                            Part.CanQuery = false
+                            Part.Material = Enum.Material.Neon
+                            Part.Size = vector.create(1, 1, 1)
+                            Part.Position = Waypoint.Position + vector.create(0, 0.5, 0)
+                            Part.Shape = Enum.PartType.Ball
+                            Part.Parent = workspace
+
+                            StatusLabel.Text = `Status: Moving to: {Waypoint.Position}`
+
+                            if Waypoint.Action == Enum.PathWaypointAction.Jump then
+                                CharacterLib.Humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+                            end
+
+                            while CharacterLib.Alive and #CapturedPlayers == 0 and Bot.Enabled and (CharacterLib.Root.Position - Waypoint.Position).Magnitude > 4 do
+                                StatusLabel.Text = "Status: Waiting for Move to finish..."
+                                CharacterLib.Humanoid:MoveTo(Waypoint.Position)
+                                task.wait()
+                            end
+
+                            StatusLabel.Text = "Status: Move finished"
+
+                            Part:Destroy()
+
+                            if i == #Waypoints then
+                                while not (Plr.PlayerGui.ScreenGui.ActionBox.Visible and Plr.PlayerGui.ScreenGui.ActionBox.Text == "Hack") and #CapturedPlayers == 0 and Bot.Enabled do
+                                    StatusLabel.Text = "Status: Waiting for computer prompt..."
+                                    task.wait()
+                                end
+                                StatusLabel.Text = "Status: Found computer prompt waiting 0.25 seconds..."
+                                task.wait(0.25)
+                            end
+                            
+                            if not Bot.Enabled or #CapturedPlayers > 0 then
+                                Success = false
+                                break
+                            end
+                        end
+
+                        if Success then
+                            StatusLabel.Text = "Status: Hacking computer"
+                            ReplicatedStorage.RemoteEvent:FireServer("Input", "Action", true)
+                            task.wait(0.1)
+                            ReplicatedStorage.RemoteEvent:FireServer("Input", "Action", false)
+
+                            local Moved = false
+
+                            local Con = Bot:Clean(Plr.PlayerGui.ScreenGui.TimingCircle:GetPropertyChangedSignal("Visible"):Connect(function()
+                                if Plr.PlayerGui.ScreenGui.TimingCircle.Visible then
+                                    local TimeOut = os.clock() + 3
+                                    repeat
+                                        StatusLabel.Text = `Status: Waiting for skill check to rotate: {math.floor(Plr.PlayerGui.ScreenGui.TimingCircle.TimingPin.Rotation)} / {math.floor(Plr.PlayerGui.ScreenGui.TimingCircle.TimingBase.Rotation + 10)}`
+                                        task.wait()
+                                    until Plr.PlayerGui.ScreenGui.TimingCircle.TimingPin.Rotation > Plr.PlayerGui.ScreenGui.TimingCircle.TimingBase.Rotation + 10 or os.clock() > TimeOut
+                                    Plr.TempPlayerStatsModule.ActionInput.Value = true
+                                    StatusLabel.Text = "Status: Hit skill check"
+                                    task.wait(0.1)
+                                    Plr.TempPlayerStatsModule.ActionInput.Value = false
+                                end
+                            end))
+                            
+                            local Con2; Con2 = Bot:Clean(Plr.PlayerGui.ScreenGui.ProgressBox:GetPropertyChangedSignal("Visible"):Connect(function()
+                                if not Plr.PlayerGui.ScreenGui.ProgressBox.Visible then
+                                    Con:Disconnect()
+                                    Con2:Disconnect()
+                                    Con, Con2 = nil, nil
+                                    Moved = true
+                                    StatusLabel.Text = "Status: Player walked away from computer"
+                                end
+                            end))
+
+                            while not Moved and #CapturedPlayers == 0 do
+                                task.wait()
+                            end
+
+                            if #CapturedPlayers > 0 then
+                                if Con then
+                                    Con:Disconnect()
+                                    Con = nil
+                                end
+                                if Con2 then
+                                    Con2:Disconnect()
+                                    Con2 = nil
+                                end
+                            end
+                        end
+                    else
+                        StatusLabel.Text = "Status: Failed to create path"
+                    end
+                else
+                    StatusLabel.Text = "Status: Failed to find computer"
+                end
+            end,
+        }
+
+        Bot = Other:CreateModule({
+            Name = "Bot",
+            Info = "Attemps to play the game for you. Currently only works for survivor. (Experimental)",
+            Enabled = function()
+                StatusLabel = Instance.new("TextLabel")
+                StatusLabel.BackgroundTransparency = 1
+                StatusLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+                StatusLabel.TextSize = 18
+                StatusLabel.Position = UDim2.new(0.5, 0, 0, 100)
+                StatusLabel.Text = "Status: None"
+                StatusLabel.FontFace = TidalWave.Fonts.SemiBold.Font
+                StatusLabel.Parent = TidalWave.Gui
+
+                while Bot.Enabled do
+                    table.clear(CapturedPlayers)
+                    for _, v in PathfindingModifiers do
+                        v:Destroy()
+                    end
+                    table.clear(PathfindingModifiers)
+                    while not CharacterLib.Alive do
+                        task.wait()
+                    end
+
+                    local Map
+                    repeat
+                        Map = GetMap()
+                        StatusLabel.Text = "Status: Waiting for map..."
+                        task.wait(0.1)
+                    until Map or not Bot.Enabled
+
+                    StatusLabel.Text = "Status: Found map"
+
+                    if not Bot.Enabled then break end
+
+                    while not IsGameActive() do
+                        StatusLabel.Text = "Status: Waiting for game to start..."
+                        task.wait(0.1)
+                    end
+
+                    if not Bot.Enabled then break end
+
+                    for _, v in Map:GetChildren() do
+                        task.spawn(Add, v)
+                    end
+                    Bot:Clean(Map.ChildAdded:Connect(Add))
+
+                    while IsGameActive() and Bot.Enabled do
+                        if not CharacterLib.Alive then task.wait() continue end
+                        StatusLabel.Text = "Status: Identifiying task..."
+                        local Task = IdentifyTask()
+                        StatusLabel.Text = `Status: Identified task: {Task}`
+                        if Tasks[Task] then
+                            StatusLabel.Text = `Status: Running task: {Task}`
+                            Tasks[Task](Map)
+                        end
+                        task.wait()
+                    end
+                end
+
+                for _, v in PathfindingModifiers do
+                    v:Destroy()
+                end
+                table.clear(PathfindingModifiers)
+                table.clear(CapturedPlayers)
+
+                StatusLabel:Destroy()
+                StatusLabel = nil
+            end
         })
     end)
 end)

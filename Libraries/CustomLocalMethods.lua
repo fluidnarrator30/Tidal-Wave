@@ -1,3 +1,12 @@
+local cloneref = cloneref or function(Obj) return Obj end
+
+local function GetService(Service)
+    return cloneref(game:GetService(Service))
+end
+
+local Players: Players = GetService("Players")
+
+local Plr = Players.LocalPlayer
 local Methods = {}
 
 local function FindSpecificObj(Obj, Index, Method, Compare)
@@ -38,13 +47,13 @@ function Methods:FindSpecificDescendant(Obj, Name, Index)
 end
 
 function Methods:FindSpecificDescendantOfClass(Obj, Class, Index)
-    return FindSpecificObj(Obj, Index, function(Obj)
+    return FindSpecificObj(Obj, Index, 'GetChildren', function(Obj)
         return Obj.ClassName == Class
     end)
 end
 
 function Methods:FindSpecificDescendantWhichIsA(Obj, Class, Index)
-    return FindSpecificObj(Obj, Index, function(Obj)
+    return FindSpecificObj(Obj, Index, 'GetChildren', function(Obj)
         return Obj:IsA(Class)
     end)
 end
@@ -61,12 +70,18 @@ function Methods:FindFirstDescendantWhichIsA(Obj, Class)
     return Methods:FindSpecificDescendantWhichIsA(Obj, Class, 1)
 end
 
-local function WaitForChildFunction(Obj, TimeOut, Method, Added)
+local function WaitForChildFunction(Obj, TimeOut, GetMethod, AddedMethod, AddedFunction)
+    for _, v in Obj[GetMethod](Obj) do
+        if AddedFunction(v) then
+            return v
+        end
+    end
+
     local Thread = coroutine.running()
     local DelayThread
 
-    local Con; Con = Obj[Method]:Connect(function(Child)
-        if Added(Child) then
+    local Con; Con = Obj[AddedMethod]:Connect(function(Child)
+        if AddedFunction(Child) then
             Con:Disconnect()
             if DelayThread then
                 task.cancel(DelayThread)
@@ -90,7 +105,7 @@ end
 function Methods:WaitForSpecificChild(Obj, Name, Index, TimeOut)
     local ExistingObj = FindSpecificObj(Obj, Index, 'GetChildren', function(Obj) return Obj.Name == Name end)
     if ExistingObj then return ExistingObj end
-    return WaitForChildFunction(Obj, TimeOut, 'ChildAdded', function()
+    return WaitForChildFunction(Obj, TimeOut, 'GetChildren', 'ChildAdded', function()
         local SpecificChild = FindSpecificObj(Obj, Index, 'GetChildren', function(Obj) return Obj.Name == Name end)
         return SpecificChild ~= nil
     end)
@@ -99,7 +114,7 @@ end
 function Methods:WaitForSpecificChildOfClass(Obj, Class, Index, TimeOut)
     local ExistingObj = FindSpecificObj(Obj, Index, 'GetChildren', function(Obj) return Obj.ClassName == Class end)
     if ExistingObj then return ExistingObj end
-    return WaitForChildFunction(Obj, TimeOut, 'ChildAdded', function()
+    return WaitForChildFunction(Obj, TimeOut, 'GetChildren', 'ChildAdded', function()
         return FindSpecificObj(Obj, Index, 'GetChildren', function(Obj) return Obj.ClassNamee == Class end) ~= nil
     end)
 end
@@ -107,7 +122,7 @@ end
 function Methods:WaitForSpecificChildWhichIsA(Obj, Class, Index, TimeOut)
     local ExistingObj = FindSpecificObj(Obj, Index, 'GetChildren', function(Obj) return Obj:IsA(Class) end)
     if ExistingObj then return ExistingObj end
-    return WaitForChildFunction(Obj, TimeOut, 'ChildAdded', function()
+    return WaitForChildFunction(Obj, TimeOut, 'GetChildren', 'ChildAdded', function()
         return FindSpecificObj(Obj, Index, 'GetChildren', function(Obj) return Obj:IsA(Class) end) ~= nil
     end)
 end
@@ -115,7 +130,7 @@ end
 function Methods:WaitForSpecificDescendant(Obj, Name, Index, TimeOut)
     local ExistingObj = FindSpecificObj(Obj, Index, 'GetDescendants', function(Obj) return Obj.Name == Name end)
     if ExistingObj then return ExistingObj end
-    return WaitForChildFunction(Obj, TimeOut, 'DescendantAdded', function()
+    return WaitForChildFunction(Obj, TimeOut, 'GetDescendants', 'DescendantAdded', function()
         return FindSpecificObj(Obj, Index, 'GetDescendants', function(Obj) return Obj.Name == Name end) ~= nil
     end)
 end
@@ -123,7 +138,7 @@ end
 function Methods:WaitForSpecificDescendantOfClass(Obj, Class, Index, TimeOut)
     local ExistingObj = FindSpecificObj(Obj, Index, 'GetDescendants', function(Obj) return Obj.ClassName == Class end)
     if ExistingObj then return ExistingObj end
-    return WaitForChildFunction(Obj, TimeOut, 'DescendantAdded', function()
+    return WaitForChildFunction(Obj, TimeOut, 'GetDescendants', 'DescendantAdded', function()
         return FindSpecificObj(Obj, Index, 'GetDescendants', function(Obj) return Obj.ClassNamee == Class end) ~= nil
     end)
 end
@@ -131,7 +146,7 @@ end
 function Methods:WaitForSpecificDescendantWhichIsA(Obj, Class, Index, TimeOut)
     local ExistingObj = FindSpecificObj(Obj, Index, 'GetDescendants', function(Obj) return Obj:IsA(Class) end)
     if ExistingObj then return ExistingObj end
-    return WaitForChildFunction(Obj, TimeOut, 'DescendantAdded', function()
+    return WaitForChildFunction(Obj, TimeOut, 'GetDescendants', 'DescendantAdded', function()
         return FindSpecificObj(Obj, Index, 'GetDescendants', function(Obj) return Obj:IsA(Class) end) ~= nil
     end)
 end
@@ -139,7 +154,7 @@ end
 function Methods:WaitForChildOfClass(Obj, Class, TimeOut)
     local ExistingObj = Obj:FindFirstChildOfClass(Class)
     if ExistingObj then return ExistingObj end
-    return WaitForChildFunction(Obj, TimeOut, 'ChildAdded', function(Child)
+    return WaitForChildFunction(Obj, TimeOut, 'GetChildren', 'ChildAdded', function(Child)
         return Child.ClassName == Class
     end)
 end
@@ -147,7 +162,7 @@ end
 function Methods:WaitForChildWhichIsA(Obj, Class, TimeOut)
     local ExistingObj = Obj:FindFirstChildWhichIsA(Class)
     if ExistingObj then return ExistingObj end
-    return WaitForChildFunction(Obj, TimeOut, 'ChildAdded', function(Child)
+    return WaitForChildFunction(Obj, TimeOut, 'GetChildren', 'ChildAdded', function(Child)
         return Obj:IsA(Class)
     end)
 end
@@ -164,16 +179,46 @@ function Methods:WaitForDescendantWhichIsA(Obj, Class, TimeOut)
     return Methods:WaitForSpecificDescendantWhichIsA(Obj, Class, 1, TimeOut)
 end
 
+function Methods:FindFirstChildOfClassWithName(Obj, Class, Name)
+    return FindSpecificObj(Obj, 1, 'GetChildren', function(Obj)
+        return Obj.ClassName == Class and Obj.Name == Name
+    end)
+end
+
+function Methods:FindFirstChildWhichIsAWithName(Obj, Class, Name)
+    return FindSpecificObj(Obj, 1, 'GetChildren', function(Obj)
+        return Obj:IsA(Class) and Obj.Name == Name
+    end)
+end
+
 function Methods:GetFullName(Obj)
     if typeof(Obj) ~= "Instance" then return nil end
     if Obj == game then return "game" end
-    if Obj.Parent == game then return Obj.ClassName == "Workspace" and "workspace" or `game:GetService("{Obj.ClassName}")` end
+    if Obj.Parent == nil then return nil end
 
     local Parts = {}
+    local Characters = {}
+    
+    for _, Player in Players:GetPlayers() do
+        if Player == Plr then continue end
+        if Player.Character then
+            Characters[Player.Character] = true
+        end
+    end
 
     while Obj.Parent ~= game do
-        local Name = Obj.Name
-        Name = Name:match("^[%a_][%w_]*$") and `.{Name}` or `["{Name}"]`
+        local Name
+        if Obj == Plr then
+            Name = ".LocalPlayer"
+        elseif Obj.ClassName == "Model" and (Obj == Plr.Character or Characters[Obj]) then
+            local Length = #Parts
+            Parts[Length + 1] = {Name = ".Character"}
+            Parts[Length + 2] = {Name = `.{Obj == Plr.Character and "LocalPlayer" or (Players:GetPlayerFromCharacter(Obj) or Obj).Name}`}
+            Obj = Players
+            break
+        else
+            Name = Obj.Name:match("^[%a_][%w_]*$") and `.{Obj.Name}` or `["{Obj.Name}"]`
+        end
 
         Parts[#Parts + 1] = {
             Name = Name,
@@ -183,14 +228,14 @@ function Methods:GetFullName(Obj)
         Obj = Obj.Parent
     end
 
-    local FullName = Obj.ClassName == "Workspace" and "workspace" or `game:GetService("{Obj.ClassName}")`
+    local FullName = Obj == workspace and "workspace" or `game:GetService("{Obj.ClassName}")`
 
     local DebugIdUsed = false
 
     for i = #Parts, 1, -1 do
         local Part = Parts[i]
         if Part.DebugId then
-            FullName = `GetObjFromId({FullName}, "{Part.DebugId}")`
+            FullName = `GetObjectFromId({FullName}, "{Part.DebugId}")`
             DebugIdUsed = true
         else
             FullName ..= Part.Name
@@ -198,10 +243,25 @@ function Methods:GetFullName(Obj)
     end
 
     if DebugIdUsed then
-        return "local function GetObjFromId(Obj, Id) for i, v in Obj:GetChildren() do if v:GetDebugId() == Id then return v end end end\n" .. FullName
+        return "local function GetObjectFromId(Obj, Id)\n\tfor i, v in Obj:GetChildren() do\n\t\tif v:GetDebugId() == Id then\n\t\t\treturn v\n\t\tend\n\tend\nend\n\n" .. FullName
     end
 
     return FullName
+end
+
+function Methods:SafeRef(Obj, Path)
+    if not Obj then return nil end
+    
+    for _, v in Path do
+        local NewObj = Obj:FindFirstChild(v)
+        if NewObj then
+            Obj = NewObj
+        else
+            return nil
+        end
+    end
+
+    return Obj
 end
 
 return Methods

@@ -16,6 +16,7 @@ World:CreateButton({
         if Reward then
             if firetouchinterest then
                 firetouchinterest(Reward, CharacterLib.Root, true)
+                task.wait()
                 firetouchinterest(Reward, CharacterLib.Root, false)
             else
                 CharacterLib.Root.CFrame = Reward.CFrame
