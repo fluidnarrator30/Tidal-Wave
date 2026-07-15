@@ -134,7 +134,7 @@ end
 
 if not shared.TidalWaveDev then
     local Success, Result = pcall(function()
-        return game:HttpGet(`https://raw.githubusercontent.com/fluidnarrator30/Tidal-Wave/refs/heads/main/{game.PlaceId}.lua`, true)
+        return game:HttpGet(`https://raw.githubusercontent.com/fluidnarrator30/Tidal-Wave/refs/heads/main/Games/{game.PlaceId}.lua`, true)
     end)
     if Success and Result ~= "404: Not Found" then
         writefile(`TidalWave/Games/{game.PlaceId}.lua`, Result)
