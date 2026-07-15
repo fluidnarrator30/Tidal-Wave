@@ -21,9 +21,6 @@ local gethui = gethui or function() return CoreGui and CoreGui:FindFirstChild("R
 local writefile, makefolder, isfolder, isfile, readfile, loadfile = writefile, makefolder, isfolder or function(s) return false end, isfile or function(s) return false end, readfile, loadfile
 local getcustomasset = getcustomasset or function(Path) return `rbxasset://{Path}` end
 
-local White = Color3.new(1, 1, 1)
-local Black = Color3.new()
-
 if IsStudio then
     local FileSystem = require(script.Libraries.FileSystem)
     writefile, makefolder, isfile, isfolder, readfile = FileSystem.writefile, FileSystem.makefolder, FileSystem.isfile, FileSystem.isfolder, FileSystem.readfile
@@ -56,17 +53,6 @@ local function GetTableLength(Tab)
 end
 
 local TidalWave
-
-local function Error(Msg, Name, Er)
-    if TidalWave then
-        TidalWave:Notify({
-            Text = `{Msg} Check logs for more info.`,
-            Type = "Error",
-            Duration = 5
-        })
-    end
-    warn(`[TidalWave]: Failed to load {Name}: {Er}`)
-end
 
 local function AddCorner(Obj, CornerRadius)
     local Corner = Instance.new("UICorner")
@@ -102,7 +88,7 @@ LoadingInfo.Size = UDim2.fromOffset(290, 35)
 LoadingInfo.BackgroundTransparency = 1
 LoadingInfo.Position = UDim2.fromOffset(5, 96)
 LoadingInfo.TextSize = 20
-LoadingInfo.TextColor3 = White
+LoadingInfo.TextColor3 = Color3.fromRGB(255, 255, 255)
 LoadingInfo.Text = ""
 LoadingInfo.FontFace = Font.fromEnum(Enum.Font.Gotham)
 LoadingInfo.Parent = LoadingFrame
@@ -118,14 +104,26 @@ AddCorner(ProgressBar, UDim.new(0, 6))
 local ProgressBarFill = Instance.new("Frame")
 ProgressBarFill.Size = UDim2.fromScale(0, 1)
 ProgressBarFill.BorderSizePixel = 0
-ProgressBarFill.BackgroundColor3 = White
+ProgressBarFill.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 ProgressBarFill.Parent = ProgressBar
+
+local function Error(Msg, Name, Er)
+    if TidalWave then
+        TidalWave:Notify({
+            Text = `{Msg} Check logs for more info.`,
+            Type = "Error",
+            Duration = 5
+        })
+    end
+    LoadingScreen:Destroy()
+    warn(`[TidalWave]: Failed to load '{Name}': {Er}`)
+end
 
 local function DownloadFile(Path, Function)
 	if not isfile(Path) then
         local NewPath = Path:gsub("TidalWave/", "")
 		local Success, Result = pcall(function()
-			return game:HttpGet(`https://raw.githubusercontent.com/fluidnarrator30/Tidal-Wave/refs/heads/main/{NewPath}`)
+			return game:HttpGet(`https://raw.githubusercontent.com/fluidnarrator30/Tidal-Wave/refs/heads/main/{NewPath}`, true)
 		end)
         if Success and Result ~= "404: Not Found" then
             writefile(Path, Result)
@@ -136,7 +134,7 @@ end
 
 if not shared.TidalWaveDev then
     local Success, Result = pcall(function()
-        return game:HttpGet(`https://raw.githubusercontent.com/fluidnarrator30/Tidal-Wave/refs/heads/main/{game.PlaceId}.lua`)
+        return game:HttpGet(`https://raw.githubusercontent.com/fluidnarrator30/Tidal-Wave/refs/heads/main/{game.PlaceId}.lua`, true)
     end)
     if Success and Result ~= "404: Not Found" then
         writefile(`TidalWave/Games/{game.PlaceId}.lua`, Result)
@@ -147,51 +145,51 @@ local GameSupported = isfile(`TidalWave/Games/{game.PlaceId}.lua`)
 local CurrentLoadAmount = 0
 local LoadAmount = GameSupported and 6 or 5
 
-local function IncrementBar(Name)
+local function IncrementBar()
     CurrentLoadAmount += 1
-    LoadingInfo.Text = `Loading {Name}...`
     TweenService:Create(ProgressBarFill, TweenInfo.new(0.4, Enum.EasingStyle.Exponential, Enum.EasingDirection.Out), {Size = UDim2.fromScale(CurrentLoadAmount / LoadAmount, 1)}):Play()
 end
 
 local function Load(Path, Name)
-    IncrementBar(Name)
+    LoadingInfo.Text = `Loading {Name}...`
     if IsStudio then
         local Ref = script
         for _, v in Path:gsub("%.lua", ""):split("/") do
             Ref = Ref[v]
         end
-        return require(Ref)
+        local Result = require(Ref)
+        IncrementBar()
+        return Result
     else
-        local Function = shared.TidalWaveDev and loadfile(`TidalWave/{Path}`) or loadstring(DownloadFile(`TidalWave/{Path}`), Name)
+        local Function = loadstring(DownloadFile(`TidalWave/{Path}`), Name)
         if typeof(Function) == "function" then
-            return Function()
+            local Result = Function()
+            IncrementBar()
+            return Result
         else
             Error(`Failed to load '{Name}'`, Name, Function)
         end
     end
 end
 
-shared.TidalWaveVersion = "2.0.0-beta"
+shared.TidalWaveVersion = "2.1.1-beta"
 shared.TidalWave = Load(`Guis/{Gui}.lua`, "Gui")
 TidalWave = shared.TidalWave
 TidalWave.Libraries = {}
 TidalWave.Libraries.CharacterLib = Load("Libraries/CharacterLib.lua", "CharacterLib")
 TidalWave.Libraries.Drawing = Load("Libraries/Drawing.lua", "Drawing")
 TidalWave.Libraries.CustomLocalMethods = Load("Libraries/CustomLocalMethods.lua", "CustomLocalMethods")
+TidalWave.Libraries.Prediction = Load('Libraries/Prediction.lua', 'Prediction')
 Load("Games/Universal.lua", "Universal")
 
-local BeforeModules = GetTableLength(TidalWave.Modules)
-local PlaceName
 if GameSupported then
-    PlaceName = MarketplaceService:GetProductInfoAsync(game.PlaceId).Name
-    IncrementBar(PlaceName)
+    local PlaceName = MarketplaceService:GetProductInfoAsync(game.PlaceId).Name
+    LoadingInfo.Text = `Loading {PlaceName} Modules...`
     loadfile(`TidalWave/Games/{game.PlaceId}.lua`)()
-end
+    IncrementBar()
 
-local NewModules = GetTableLength(TidalWave.Modules) - BeforeModules
-if NewModules > 0 then
     TidalWave:Notify({
-        Text = `Loaded {NewModules} {NewModules > 1 and "Modules" or "Module"} for '{PlaceName or MarketplaceService:GetProductInfoAsync(game.PlaceId).Name}'`,
+        Text = `Loaded Modules for '{PlaceName}'`,
         Duration = 5
     })
 end
