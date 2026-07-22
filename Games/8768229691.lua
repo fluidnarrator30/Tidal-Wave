@@ -10,4 +10,4 @@ local function DownloadFile(Path, Function)
     return (Function or readfile)(Path)
 end
 
-loadstring(DownloadFile('Games/8542275097.lua'))()
+loadstring(DownloadFile('TidalWave/Games/8542275097.lua'))()
