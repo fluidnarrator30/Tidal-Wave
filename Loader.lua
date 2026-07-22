@@ -45,12 +45,11 @@ end
 
 local function DownloadFile(Path, Function)
 	if not isfile(Path) then
-        local NewPath = Path:gsub("TidalWave/", "")
 		local Success, Result = pcall(function()
-			return game:HttpGet(`https://raw.githubusercontent.com/fluidnarrator30/Tidal-Wave/refs/heads/main/{NewPath}`, true)
+			return game:HttpGet(`https://raw.githubusercontent.com/fluidnarrator30/Tidal-Wave/refs/heads/main/{Path:gsub('TidalWave/', '')}`, true)
 		end)
         if Success and Result ~= "404: Not Found" then
-            writefile(`TidalWave/{Path}`, Result)
+            writefile(Path, Result)
         end
 	end
     return (Function or readfile)(Path)
@@ -84,7 +83,7 @@ local ImageLabel = Instance.new("ImageLabel")
 ImageLabel.Size = UDim2.fromOffset(125, 72)
 ImageLabel.BackgroundTransparency = 1
 ImageLabel.Position = UDim2.fromOffset(87, 10)
-ImageLabel.Image = DownloadFile('Assets/TidalWaveAutoSpa.webp', getcustomasset)
+ImageLabel.Image = DownloadFile('TidalWave/Assets/TidalWaveAutoSpa.webp', getcustomasset)
 ImageLabel.Parent = LoadingFrame
 
 local LoadingInfo = Instance.new("TextLabel")
