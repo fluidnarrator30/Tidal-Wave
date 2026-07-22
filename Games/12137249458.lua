@@ -25,6 +25,12 @@ local function Run(f)
 end
 
 Run(function()
+    function CharacterLib:IsTeammate(Character)
+        return TidalWave:IsFriend(Character.Player)
+    end
+end)
+
+Run(function()
     Run(function()
         local SilentAimbot, WallCheck, WallBang, Part, Fov, Old, Circle, CircleObject, OutlineObject, OutlineColor, FillColor, OutlineTransparency, FillTransparency, Thickness
 
@@ -54,6 +60,17 @@ Run(function()
             end
         end
 
+        local function UpdateCircle()
+            if CircleObject then
+                CircleObject.Radius = Fov.Value
+                CircleObject.FillTransparency = FillTransparency.Value
+                CircleObject.OutlineTransparency = OutlineTransparency.Value
+                CircleObject.FillColor = FillColor.Color
+                CircleObject.OutlineColor = OutlineColor.Color
+                CircleObject.Thickness = Thickness.Value
+            end
+        end
+
         SilentAimbot = Combat:CreateModule({
             Name = "SilentAimbot",
             Info = "Silently adjusts your aim towards the nearest target",
@@ -62,7 +79,7 @@ Run(function()
                     CreateCircle()
                 end
 
-                SilentAimbot:Clean(RunService.RenderStepped:Connect(UpdateCirclePosition))
+                SilentAimbot:Clean(RunService.PreRender:Connect(UpdateCirclePosition))
 
                 local ProjectileModule = require(ReplicatedStorage.ModuleScripts.GunModules.GunFramework.Projectile)
 
@@ -116,6 +133,14 @@ Run(function()
             List = {"Head", "Root"}
         })
 
+        Fov = SilentAimbot:CreateSlider({
+            Name = "Fov",
+            Default = 100,
+            Min = 0,
+            Max = 1000,
+            Function = UpdateCircle
+        })
+
         Circle = SilentAimbot:CreateToggle({
             Name = "Circle",
             Function = function(Enabled)
@@ -128,26 +153,6 @@ Run(function()
                     v:SetVisible(Enabled)
                 end
             end
-        })
-
-        local function UpdateCircle()
-            if CircleObject then
-                CircleObject.Radius = Fov.Value
-                CircleObject.FillTransparency = FillTransparency.Value
-                CircleObject.OutlineTransparency = OutlineTransparency.Value
-                CircleObject.FillColor = FillColor.Color
-                CircleObject.OutlineColor = OutlineColor.Color
-                CircleObject.Thickness = Thickness.Value
-            end
-        end
-
-        Fov = SilentAimbot:CreateSlider({
-            Name = "Fov",
-            Default = 100,
-            Min = 0,
-            Max = 1000,
-            Visible = false,
-            Function = UpdateCircle
         })
 
         Thickness = SilentAimbot:CreateSlider({

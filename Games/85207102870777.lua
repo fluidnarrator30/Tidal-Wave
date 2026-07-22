@@ -86,6 +86,17 @@ Run(function() -- Combat
             end
         end
 
+        local function UpdateCircle()
+            if CircleObject then
+                CircleObject.Radius = Fov.Value
+                CircleObject.FillTransparency = FillTransparency.Value
+                CircleObject.OutlineTransparency = OutlineTransparency.Value
+                CircleObject.FillColor = FillColor.Color
+                CircleObject.OutlineColor = OutlineColor.Color
+                CircleObject.Thickness = Thickness.Value
+            end
+        end
+
         local Params = RaycastParams.new()
         Params.RespectCanCollide = true
 
@@ -155,12 +166,20 @@ Run(function() -- Combat
 
         WallCheck = SilentAimbot:CreateToggle({
             Name = "WallCheck",
-            Info = "Ignores zombies behind walls",
+            Info = "Ignores players behind walls",
         })
 
         Part = SilentAimbot:CreateDropdown({
             Name = "Part",
             List = {"Head", "Root"}
+        })
+
+        Fov = SilentAimbot:CreateSlider({
+            Name = "Fov",
+            Default = 100,
+            Min = 0,
+            Max = 1000,
+            Function = UpdateCircle
         })
 
         Circle = SilentAimbot:CreateToggle({
@@ -175,26 +194,6 @@ Run(function() -- Combat
                     v:SetVisible(Enabled)
                 end
             end
-        })
-
-        local function UpdateCircle()
-            if CircleObject then
-                CircleObject.Radius = Fov.Value
-                CircleObject.FillTransparency = FillTransparency.Value
-                CircleObject.OutlineTransparency = OutlineTransparency.Value
-                CircleObject.FillColor = FillColor.Color
-                CircleObject.OutlineColor = OutlineColor.Color
-                CircleObject.Thickness = Thickness.Value
-            end
-        end
-
-        Fov = SilentAimbot:CreateSlider({
-            Name = "Fov",
-            Default = 100,
-            Min = 0,
-            Max = 1000,
-            Visible = false,
-            Function = UpdateCircle
         })
 
         Thickness = SilentAimbot:CreateSlider({

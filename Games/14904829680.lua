@@ -16,7 +16,7 @@ local TidalWave = shared.TidalWave
 local Categories = TidalWave.Categories
 local CharacterLib = TidalWave.Libraries.CharacterLib
 local Modules = TidalWave.Modules
-local CustomLocalMethods = TidalWave.Libraries.CustomLocalMethods
+local ObjectFunctions = TidalWave.Libraries.ObjectFunctions
 
 Modules.Speed.Options.Method:SetValue("CFrame")
 Modules.Fly.Options.FlyMethod:SetValue("CFrame")
@@ -152,7 +152,7 @@ local function NotifyPoopSploit(Function)
 end
 
 local function SafeRef(Obj, Path)
-    return CustomLocalMethods:SafeRef(Obj, Path)
+    return ObjectFunctions:SafeRef(Obj, Path)
 end
 
 local function GetKiller()
@@ -1209,22 +1209,35 @@ Run(function() -- Player
     Run(function() -- AutoDeadHard
         local AutoDeadHard, UseWhenDowned, DeadHardConnection
 
+        local function LocalAdded()
+            AutoDeadHard:Clean(CharacterLib.Root:GetAttributeChangedSignal("Blood"):Connect(function()
+                ReplicatedStorage.RemoteEvents.Perk_Event:FireServer("Dodge")
+            end))
+        end
+
         AutoDeadHard = PlayerCategory:CreateModule({
             Name = "Auto Dead Hard",
             Info = "Automatically uses dead hard after you get hit",
             Enabled = function()
-                if UseWhenDowned.Enabled and CharacterLib.Alive then
-                    AutoDeadHard:Clean(CharacterLib.Root:GetAttributeChangedSignal("Blood"):Connect(function()
-                        ReplicatedStorage.RemoteEvents.Perk_Event:FireServer("Dodge")
-                    end))
+                if UseWhenDowned.Enabled then
+                    if CharacterLib.Alive then
+                        LocalAdded()
+                    end
+                    AutoDeadHard:Clean(CharacterLib.Events.LocalAdded:Connect(LocalAdded))
                 else
-                    local Backpack = Plr:FindFirstChildOfClass("Backpack")
-                    local Scripts = Backpack and Backpack:FindFirstChild("Scripts")
-                    local Values = Scripts and Scripts:FindFirstChild("values")
-                    local HealthState = Values and Values:FindFirstChild("HealthState")
-                    AutoDeadHard:Clean(HealthState:GetPropertyChangedSignal("Value"):Connect(function()
-                        ReplicatedStorage.RemoteEvents.Perk_Event:FireServer("Dodge")
-                    end))
+                    local HealthState
+                    repeat
+                        HealthState = SafeRef(Plr, {'Backpack', 'Scripts', 'values', 'HealthState'})
+                        task.wait()
+                    until HealthState or not AutoDeadHard.Enabled
+                    if AutoDeadHard.Enabled then
+                        if HealthState.Value == 0 then
+                            ReplicatedStorage.RemoteEvents.Perk_Event:FireServer("Dodge")
+                        end
+                        AutoDeadHard:Clean(HealthState:GetPropertyChangedSignal("Value"):Connect(function()
+                            ReplicatedStorage.RemoteEvents.Perk_Event:FireServer("Dodge")
+                        end))
+                    end
                 end
             end
         })
@@ -1645,7 +1658,7 @@ Run(function() -- Other
                     local ServerEvent = RemoteEvents and RemoteEvents:FindFirstChild("Server_Event")
                     if ServerEvent then
                         ServerEvent:FireServer("Trap", "Grab", Object)
-                        Notify({Text = `Destroyed Object: {CustomLocalMethods:GetFullName(Object)}`})
+                        Notify({Text = `Destroyed Object: {ObjectFunctions:GetFullName(Object)}`})
                     else
                         Notify({Text = "Failed to find event"})
                     end
@@ -1663,7 +1676,7 @@ Run(function() -- Other
                     local f = loadstring(`return {Text}`)
                     if typeof(f) == "function" then
                         Object = f()
-                        Notify({Text = `Set instance path to {CustomLocalMethods:GetFullName(Object)}`})
+                        Notify({Text = `Set instance path to {ObjectFunctions:GetFullName(Object)}`})
                     else
                         Notify({Text = f})
                     end

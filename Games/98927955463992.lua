@@ -7,7 +7,7 @@ end
 local TidalWave = shared.TidalWave
 local Categories = TidalWave.Categories
 local CharacterLib = TidalWave.Libraries.CharacterLib
-local CustomLocalMethods = TidalWave.Libraries.CustomLocalMethods
+local ObjectFunctions = TidalWave.Libraries.ObjectFunctions
 
 local Combat = Categories.Combat
 
@@ -16,15 +16,6 @@ local ReplicatedStorage = GetService("ReplicatedStorage")
 local RunService = GetService("RunService")
 
 local Plr = Players.LocalPlayer
-local Backpack = Plr:FindFirstChildOfClass("Backpack")
-
-local function GetTableLength(Tab)
-	local Len = 0
-	for _ in Tab do
-		Len += 1
-	end
-	return Len
-end
 
 do
     local ProjectileAura, HitCooldown, AutoEquipGun, MaxDistance, Bullets, CachedGun
@@ -53,7 +44,7 @@ do
             end
             local Root = Zombie:FindFirstChild("HumanoidRootPart")
             if not Root then continue end
-            local Head = CustomLocalMethods:FindFirstChildOfClassWithName(Zombie, "Part", "Head")
+            local Head = ObjectFunctions:FindFirstChildOfClassWithName(Zombie, "Part", "Head")
             if Head and Head.Transparency == 0 then
                 local Distance = (Root.Position - CharacterLib.Root.Position).Magnitude
                 if Distance <= MaxDistance.Value then
@@ -92,40 +83,30 @@ do
 
                 local Tool
 
-                local function EquipTool()
-                    if not Tool or (Tool and Tool.Parent == nil) or (Tool and Tool.Parent == Backpack) then
-                        Tool = CharacterLib.Character:FindFirstChildOfClass("Tool")
-                        if not Tool and AutoEquipGun.Enabled then
-                            local BackpackedTool = Backpack:FindFirstChildOfClass("Tool")
-                            if BackpackedTool then
-                                Tool = BackpackedTool
-                                CharacterLib.Humanoid:EquipTool(BackpackedTool)
-                                task.wait()
-                            end
-                        end
-                    end
-                end
-
-                while ProjectileAura.Enabled and task.wait() do
+                while ProjectileAura.Enabled do
                     if CharacterLib.Alive then
-                        EquipTool()
+                        if not Tool or (Tool and Tool.Parent == nil) then
+                            Tool = CharacterLib.Character:FindFirstChildOfClass('Tool')
+                        elseif Tool and Tool.Parent == Plr.Backpack and AutoEquipGun.Enabled then
+                            CharacterLib.Humanoid:EquipTool(Tool)
+                            task.wait()
+                        end
 
                         if Tool then
                             local ClosestZombies = GetClosestZombies()
-                            if #ClosestZombies == 0 then continue end
+                            if #ClosestZombies ~= 0 then
+                                local Index = 0
 
-                            print(#ClosestZombies)
-
-                            local Index = 0
-
-                            for _, Zombie in ClosestZombies do
-                                Index += 1
-                                if Index >= Bullets.Value then break end
-                                GunHit:FireServer(Tool.Name, GetZombieId(Zombie.Character), Zombie.Root.Position)
-                                HitZombies[Zombie.Character] = os.clock() + HitCooldown.Value
+                                for _, Zombie in ClosestZombies do
+                                    Index += 1
+                                    if Index >= Bullets.Value then break end
+                                    GunHit:FireServer(Tool.Name, GetZombieId(Zombie.Character), Zombie.Root.Position)
+                                    HitZombies[Zombie.Character] = os.clock() + HitCooldown.Value
+                                end
                             end
                         end
                     end
+                    task.wait()
                 end
             else
                 table.clear(Zombies)

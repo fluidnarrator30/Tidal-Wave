@@ -83,7 +83,7 @@ Run(function() -- World
         local MineRequest = ReplicatedStorage.Remotes.MineRequest
 
         Nuker = World:CreateModule({
-            Name = 'EggNuker',
+            Name = 'Nuker',
             Info = 'Automatically mines blocks around you.',
             Enabled = function()
                 while Nuker.Enabled do

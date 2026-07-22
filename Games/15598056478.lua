@@ -8,7 +8,7 @@ local ReplicatedStorage: ReplicatedStorage = GetService('ReplicatedStorage')
 
 local TidalWave = shared.TidalWave
 local Categories = TidalWave.Categories
-local CustomLocalMethods = TidalWave.Libraries.CustomLocalMethods
+local ObjectFunctions = TidalWave.Libraries.ObjectFunctions
 
 local Combat = Categories.Combat
 local PlayerCategory = Categories.Player
@@ -40,7 +40,7 @@ local restorefunction = restorefunction
 local getgc = getgc or get_gc_objects
 
 local function SafeRef(Obj, Path)
-    return CustomLocalMethods:SafeRef(Obj, Path)
+    return ObjectFunctions:SafeRef(Obj, Path)
 end
 
 Run(function() -- Player
