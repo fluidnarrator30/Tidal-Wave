@@ -21,6 +21,7 @@ local CharacterLib = {
     Running = false,
     List = {},
     Connections = {},
+    LocalConnections = {},
     PlayerConnections = {},
     CharacterThreads = {}
 }
@@ -66,7 +67,7 @@ Run(function()
 end)
 
 local function LoopClean(Tab)
-    for i, v in Tab do
+    for _, v in Tab do
         if typeof(v) == "table" then
             LoopClean(v)
         elseif typeof(v) == "RBXScriptConnection" then
@@ -89,24 +90,26 @@ function CharacterLib:WaitForChild(Obj, Name, TimeOut, Property)
     if Property then
         local End = TimeOut and os.clock() + TimeOut
         repeat
+            if End and os.clock() >= End then break end
             local Prop = Obj[Name]
             if Prop then
                 return Prop
             end
-            if End and os.clock() >= End then break end
             task.wait()
         until false
     else
         if CharacterLib.Connections[Obj] then return end
 
-        local Con
+        local Con, DelayThread
 
         local function Disconnect()
             if Con then
-                if Con.Connected then
-                    Con:Disconnect()
-                end
+                Con:Disconnect()
                 Con = nil
+            end
+            if DelayThread then
+                task.cancel(DelayThread)
+                DelayThread = nil
             end
             if CharacterLib.Connections and CharacterLib.Connections[Obj] then
                 CharacterLib.Connections[Obj] = nil
@@ -128,7 +131,8 @@ function CharacterLib:WaitForChild(Obj, Name, TimeOut, Property)
         end)
 
         if TimeOut then
-            task.delay(TimeOut, function()
+            DelayThread = task.delay(TimeOut, function()
+                DelayThread = nil
                 Disconnect()
                 coroutine.resume(Thread, nil)
             end)
@@ -143,8 +147,9 @@ function CharacterLib:IsTeammate(Character)
     if TidalWave:IsFriend(Character.Player) then return true end
     if not Plr.Team then return false end
     if not Character.Player.Team then return false end
-    if Character.Player.Team ~= Plr.Team then return false end
-    return #Plr.Team:GetPlayers() ~= #Character.Player.Team:GetPlayers()
+    if Character.Player.Team == Plr.Team then return true end
+    if #Plr.Team:GetPlayers() == #Character.Player.Team:GetPlayers() then return true end
+    return false
 end
 
 function CharacterLib:FindCharacter(Char)
@@ -164,8 +169,13 @@ function CharacterLib:GetUpdateConnections(Char)
 end
 
 function CharacterLib:GetTeamUpdateConnections(Char)
+    return {}
+end
+
+function CharacterLib:GetCharacterProperties(Char)
     return {
-        Char.Player and Char.Player:GetPropertyChangedSignal("Team") or nil
+        Health = Char.Humanoid.Health,
+        MaxHealth = Char.Humanoid.MaxHealth
     }
 end
 
@@ -174,8 +184,7 @@ function CharacterLib:CanAttack(Character)
 end
 
 function CharacterLib:GetTeamColor(Character)
-    local IsFriend, FriendColor = TidalWave:IsFriend(Character.Player)
-    return IsFriend and FriendColor or Character.Player and Character.Player.Team and Character.Player.TeamColor.Color or nil
+    return (Character.Player and Character.Player.Team and Character.Player.TeamColor.Color) or nil
 end
 
 local Params = RaycastParams.new()
@@ -185,7 +194,7 @@ function CharacterLib:WallCheck(Origin, Target)
     local IgnoreList = {CharacterLib.Character}
     for _, Character in CharacterLib.List do
         if not Character.CanAttack then
-            table.insert(IgnoreList, Character.Character)
+            IgnoreList[#IgnoreList + 1] = Character.Character
         end
     end
 
@@ -198,21 +207,22 @@ function CharacterLib:GetCharacterWithinMouse(Settings)
 	if CharacterLib.Alive then
 		local MouseLocation = Settings.MouseOrigin or UIS.GetMouseLocation(UIS)
         local WithinMouse = {}
-		for i, v in CharacterLib.List do
-			if not Settings.Players and v.Player then continue end
-			if not Settings.NPCS and v.NPC then continue end
-			if v.Teammate then continue end
-            local Vector, OnScreen = Camera:WorldToViewportPoint(v[Settings.Part or "Root"].Position)
-			if not OnScreen then continue end
-			local Magnitude = (MouseLocation - Vector2.new(Vector.X, Vector.Y)).Magnitude
-			if Magnitude > Settings.Range then continue end
-			if CharacterLib:CanAttack(v) then
-				table.insert(WithinMouse, {
-					Character = v,
-					Magnitude = Magnitude,
-                    Vector = Vector
-				})
-			end
+        local Part = Settings.Part or 'Root'
+		for _, v in CharacterLib.List do
+            if v.Player and not Settings.Players then continue end
+            if v.NPC and not Settings.NPCS then continue end
+            if v.Teammate then continue end
+            local Vector, OnScreen = Camera:WorldToViewportPoint(v[Part].Position)
+            if OnScreen then
+                local Magnitude = (MouseLocation - Vector2.new(Vector.X, Vector.Y)).Magnitude
+                if Magnitude <= Settings.Range and CharacterLib:CanAttack(v) then
+                    WithinMouse[#WithinMouse + 1] = {
+                        Character = v,
+                        Magnitude = Magnitude,
+                        Vector = Vector
+                    }
+                end
+            end
 		end
 
 		table.sort(WithinMouse, CharacterLib.Sort or function(a, b)
@@ -220,7 +230,7 @@ function CharacterLib:GetCharacterWithinMouse(Settings)
 		end)
 
 		for _, v in WithinMouse do
-			if Settings.WallCheck and CharacterLib:WallCheck(Settings.Origin or Camera.CFrame, v.Character[Settings.Part or "Root"].Position) then continue end
+			if Settings.WallCheck and CharacterLib:WallCheck(Settings.Origin or Camera.CFrame, v.Character[Part].Position) then continue end
 			return v.Character, v.Vector
 		end
 	end
@@ -231,14 +241,18 @@ end
 function CharacterLib:GetClosestCharacter(Settings)
 	if CharacterLib.Alive then
 		local RootPos, ClosestPlayers = Settings.Origin or CharacterLib.Root.Position, {}
+        local Part = Settings.Part or 'Root'
+        local Range = Settings.Range or math.huge
 		for _, v in CharacterLib.List do
-			if not Settings.Players and v.Player then continue end
-			if not Settings.NPCs and v.NPC then continue end
-			if v.Teammate then continue end
-			local Magnitude = (v[Settings.Part or "Root"].Position - RootPos).Magnitude
-			if Magnitude > (Settings.Range or math.huge) then continue end
-			if CharacterLib:CanAttack(v) then
-				table.insert(ClosestPlayers, {Character = v, Magnitude = Magnitude})
+			if v.Player and not Settings.Players then continue end
+            if v.NPC and not Settings.NPCS then continue end
+            if v.Teammate then continue end
+			local Magnitude = (v[Part].Position - RootPos).Magnitude
+			if Magnitude <= Range and CharacterLib:CanAttack(v) then
+                ClosestPlayers[#ClosestPlayers + 1] = {
+                    Character = v,
+                    Magnitude = Magnitude
+                }
 			end
 		end
 
@@ -247,8 +261,8 @@ function CharacterLib:GetClosestCharacter(Settings)
 		end)
 
 		for _, v in ClosestPlayers do
-			if Settings.WallCheck and CharacterLib:WallCheck(RootPos, v.Character[Settings.Part or "Root"].Position) then continue end
-			return v
+			if Settings.WallCheck and CharacterLib:WallCheck(RootPos, v.Character[Part].Position) then continue end
+			return v.Character
 		end
 	end
 
@@ -259,14 +273,19 @@ function CharacterLib:GetClosestCharacters(Settings)
 	local Returned = {}
 	if CharacterLib.Alive then
 		local RootPos, ClosestPlayers = Settings.Origin or CharacterLib.Root.Position, {}
+        local Part = Settings.Part or 'Root'
+        local Range = Settings.Range or math.huge
+        local Limit = Settings.Limit or math.huge
 		for _, v in CharacterLib.List do
-			if not Settings.Players and v.Player then continue end
-			if not Settings.NPCs and v.NPC then continue end
-			if v.Teammate then continue end
-			local Magnitude = (v[Settings.Part or "Root"].Position - RootPos).Magnitude
-			if Magnitude > (Settings.Range or math.huge) then continue end
-			if CharacterLib:CanAttack(v) then
-				table.insert(ClosestPlayers, {Character = v, Magnitude = Magnitude})
+			if v.Player and not Settings.Players then continue end
+            if v.NPC and not Settings.NPCS then continue end
+            if v.Teammate then continue end
+			local Magnitude = (v[Part].Position - RootPos).Magnitude
+			if Magnitude <= Range and CharacterLib:CanAttack(v) then
+                ClosestPlayers[#ClosestPlayers + 1] = {
+                    Character = v,
+                    Magnitude = Magnitude
+                }
 			end
 		end
 
@@ -275,16 +294,20 @@ function CharacterLib:GetClosestCharacters(Settings)
 		end)
 
 		for _, v in ClosestPlayers do
-			if Settings.WallCheck and CharacterLib:WallCheck(RootPos, v.Character[Settings.Part or "Root"].Position) then continue end
-			table.insert(Returned, v.Character)
-			if #Returned >= (Settings.Limit or math.huge) then break end
+			if Settings.WallCheck and CharacterLib:WallCheck(RootPos, v.Character[Part].Position) then continue end
+            local i = #Returned + 1
+            Returned[i] = v.Character
+			if i >= Limit then break end
 		end
 	end
 
 	return Returned
 end
 
-local LocalPlayerFilter = {"NPC", "Connections"}
+local LocalCharacterPropertyBlacklist = {
+    NPC = true,
+    Connections = true
+}
 
 function CharacterLib:AddCharacter(Char, Player)
     if not Char then return end
@@ -301,46 +324,50 @@ function CharacterLib:AddCharacter(Char, Player)
                 Animator = Humanoid:FindFirstChildOfClass("Animator"),
                 Root = Root,
                 Head = Head,
-                Health = Humanoid.Health,
-                MaxHealth = Humanoid.MaxHealth,
+                Torso = if Humanoid.RigType == Enum.HumanoidRigType.R6 then Char:FindFirstChild('Torso') else Char:FindFirstChild("UpperTorso") or Char:FindFirstChild("LowerTorso"),
                 HipHeight = Humanoid.HipHeight + (Root.Size.Y / 2) + (Humanoid.RigType == Enum.HumanoidRigType.R6 and 2 or 0),
                 RigType = Humanoid.RigType,
                 NPC = Player == nil,
                 Connections = {}
             }
 
+            for i, v in CharacterLib:GetCharacterProperties(Character) do
+                Character[i] = v
+            end
+
+            local ConnectionsTable = Player == Plr and CharacterLib.LocalConnections or Character.Connections
+
+            for _, v in CharacterLib:GetUpdateConnections(Character) do
+                ConnectionsTable[#ConnectionsTable + 1] = v:Connect(function()
+                    for Property, Value in CharacterLib:GetCharacterProperties(Character) do
+                        Character[Property] = Value
+                        if LocalCharacterPropertyBlacklist[Property] then return end
+                        CharacterLib[Property] = Value
+                    end
+                    CharacterLib.Events[Player == Plr and 'LocalUpdated' or 'CharacterUpdated']:Fire(Character)
+                end)
+            end
+            for _, v in CharacterLib:GetTeamUpdateConnections(Character) do
+                ConnectionsTable[#ConnectionsTable + 1] = v:Connect(function()
+                    if Player == Plr then
+                        CharacterLib:Refresh()
+                    else
+                        CharacterLib:RefreshCharacter(Character.Character, Player)
+                    end
+                    CharacterLib.Events[Player == Plr and 'LocalTeamChanged' or 'TeamChanged']:Fire(Character)
+                end)
+            end
+
             if Player == Plr then
                 for i, v in Character do
-                    if table.find(LocalPlayerFilter, i) then continue end
+                    if LocalCharacterPropertyBlacklist[i] then continue end
                     CharacterLib[i] = v
                 end
                 CharacterLib.Alive = true
                 CharacterLib.Events.LocalAdded:Fire(Character)
             else
                 Character.Teammate = CharacterLib:IsTeammate(Character)
-                for _, v in CharacterLib:GetUpdateConnections(Character) do
-                    table.insert(Character.Connections, v:Connect(function()
-                        Character.Health = Humanoid.Health
-                        Character.MaxHealth = Humanoid.MaxHealth
-                        CharacterLib.Events.CharacterUpdated:Fire(Character)
-                    end))
-                end
-                for _, v in CharacterLib:GetTeamUpdateConnections(Character) do
-                    table.insert(Character.Connections, v:Connect(function()
-                        for _, v2 in CharacterLib.List do
-                            if v2.Teammate ~= CharacterLib:IsTeammate(v2) then
-                                CharacterLib:RefreshCharacter(v2.Character, v2.Player)
-                            end
-                        end
-                        
-                        if Player == Plr then
-                            CharacterLib:Refresh()
-                        else
-                            CharacterLib:RefreshCharacter(Character.Character, Player)
-                        end
-                    end))
-                end
-                table.insert(CharacterLib.List, Character)
+                CharacterLib.List[#CharacterLib.List + 1] = Character
                 CharacterLib.Events.CharacterAdded:Fire(Character)
             end
         end
@@ -358,6 +385,10 @@ function CharacterLib:RemoveCharacter(Char, Player)
         for _, v in ItemsToClear do
             CharacterLib[v] = nil
         end
+        for _, v in CharacterLib.LocalConnections do
+            v:Disconnect()
+        end
+        table.clear(CharacterLib.LocalConnections)
         CharacterLib.Alive = false
         CharacterLib.Events.LocalRemoved:Fire(CharacterLib)
     elseif Character then
@@ -390,6 +421,13 @@ function CharacterLib:AddPlayer(Player)
         Player.CharacterRemoving:Connect(function(Char)
             CharacterLib:RemoveCharacter(Char, Player)
         end),
+        Player:GetPropertyChangedSignal("Team"):Connect(function()
+            if Player == Plr then
+                CharacterLib:Refresh()
+            else
+                CharacterLib:RefreshCharacter(Player.Character, Player)
+            end
+        end)
     }
 end
 
@@ -409,16 +447,16 @@ function CharacterLib:Start()
     if CharacterLib.Running then
         CharacterLib:Stop()
     end
-    table.insert(CharacterLib.Connections, Players.PlayerAdded:Connect(function(Player)
+    CharacterLib.Connections[#CharacterLib.Connections + 1] = Players.PlayerAdded:Connect(function(Player)
         CharacterLib:AddPlayer(Player)
-    end))
-    table.insert(CharacterLib.Connections, Players.PlayerRemoving:Connect(function(Player)
+    end)
+    CharacterLib.Connections[#CharacterLib.Connections + 1] = Players.PlayerRemoving:Connect(function(Player)
         CharacterLib:RemovePlayer(Player)
-    end))
-    table.insert(CharacterLib.Connections, workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
+    end)
+    CharacterLib.Connections[#CharacterLib.Connections + 1] = workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
         Camera = workspace.CurrentCamera or workspace:FindFirstChildOfClass("Camera")
-    end))
-    for i, Player in Players:GetPlayers() do
+    end)
+    for _, Player in Players:GetPlayers() do
         CharacterLib:AddPlayer(Player)
     end
     CharacterLib.Running = true
@@ -434,6 +472,12 @@ function CharacterLib:Stop()
         end
         table.clear(v)
     end
+    for _, Player in Players:GetPlayers() do
+        CharacterLib:RemovePlayer(Player)
+    end
+    for _, Character in CharacterLib.List do
+        CharacterLib:RemoveCharacter(Character)
+    end
     table.clear(CharacterLib.Connections)
     table.clear(CharacterLib.PlayerConnections)
     CharacterLib.Running = false
@@ -443,7 +487,7 @@ function CharacterLib:Shutdown()
     if CharacterLib.Running then
         CharacterLib:Stop()
     end
-    for i, v in CharacterLib.Events do
+    for _, v in CharacterLib.Events do
         v:Destroy()
     end
 
@@ -451,11 +495,9 @@ function CharacterLib:Shutdown()
 end
 
 function CharacterLib:Refresh()
-    local Clone = table.clone(CharacterLib.List)
-    for i, v in Clone do
-        CharacterLib:RefreshCharacter(Clone.Character, Clone.Player)
+    for _, Char in  CharacterLib.List do
+        CharacterLib:RefreshCharacter(Char.Character, Char.Player)
     end
-    table.clear(Clone)
 end
 
 function CharacterLib:Restart()

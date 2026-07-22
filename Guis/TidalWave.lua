@@ -16,6 +16,17 @@ local MarketplaceService: MarketplaceService = GetService("MarketplaceService")
 local Plr: Player = Players.LocalPlayer
 local Mouse: Mouse = cloneref(Plr:GetMouse())
 local Camera: Camera = workspace.CurrentCamera or workspace:FindFirstChildOfClass("Camera")
+local Enum = Enum
+local Color3 = Color3
+local Instance = Instance
+local TweenInfo = TweenInfo
+local UDim2 = UDim2
+local UDim = UDim
+local math = math
+local string = string
+local table = table
+local task = task
+local Font = Font
 
 local IsStudio = RunService:IsStudio()
 
@@ -63,7 +74,9 @@ local function AddMaid(Obj)
         local Connected
 
         if Type == "Instance" then
+			local DestroyingCon = Connection.Destroying:Once(Remove)
             Disconnect = function()
+				DestroyingCon:Disconnect()
                 Connection:Destroy()
                 Remove()
             end
@@ -97,18 +110,18 @@ local function AddMaid(Obj)
             end
         end
 
-        local Metatable = {
+        local Tab = {
+            Disconnect = Disconnect,
+            Destroy = Disconnect,
+            Remove = Disconnect,
+        }
+
+		local Metatable = {
             __index = function(_, i)
                 if i == 'Connected' then
                     return Connected()
                 end
             end
-        }
-
-        local Tab = {
-            Disconnect = Disconnect,
-            Destroy = Disconnect,
-            Remove = Disconnect,
         }
 
         setmetatable(Tab, Metatable)
@@ -118,17 +131,17 @@ local function AddMaid(Obj)
         return Tab
     end
 
+	function Obj:CleanUp()
+		for _, v in Obj.Connections do
+			if not v.Connected then
+				v:Disconnect()
+			end
+		end
+	end
+
     function Obj:DisconnectAll()
         for _, v in Obj.Connections do
             v:Disconnect()
-        end
-    end
-
-    function Obj:RemoveDisconnected()
-        for i, v in Obj.Connections do
-            if not v.Connected then
-                table.remove(Obj.Connections, i)
-            end
         end
     end
 end
@@ -211,17 +224,18 @@ local Gui = {
     RainbowRefreshRate = 60,
     RainbowSpeed = 1,
     RainbowSpread = 1,
+	ModuleNotificationDuration = 2,
 	Profile = "Default",
     NotificationHorizontalAlignment = "Right",
     NotificationVerticalAlignment = "Bottom",
     NotificationFillDirection = "Up",
+    RainbowTable = {},
 	Profiles = {},
     Friends = {},
 	Menus = setmetatable({}, LengthMetatable),
 	Modules = setmetatable({}, LengthMetatable),
     Buttons = setmetatable({}, LengthMetatable),
 	Categories = setmetatable({}, LengthMetatable),
-    RainbowTable = {},
 	Fonts = {
 		Regular = {
 			Name = "Gotham",
@@ -261,14 +275,14 @@ local function GetColor(Type)
             CurrentColor = (CurrentColor or CurrentTheme)[v]
             if not CurrentColor then
                 warn(debug.traceback(`Invalid Color: {Type}`))
-                return Color3.new()
+                return Black
             end
         end
 
         return CurrentColor.Color, CurrentColor.T
     else
         warn(debug.traceback(`Failed to find theme: {Gui.Theme}`))
-        return Color3.new()
+        return Black
     end
 end
 
@@ -360,114 +374,6 @@ local function TweenEnabledBar(Bar, Enabled)
         TweenService:Create(Bar, TweenInfo.new(0.2), {BackgroundColor3 = Enabled and GetColor('Main/EnabledBar') or GetColor('Main/DisabledBar')}):Play()
     end
 end
-
-local Keys = {
-    ["MouseButton1"] = Enum.UserInputType.MouseButton1,
-    ["MouseButton2"] = Enum.UserInputType.MouseButton2,
-    ["MouseButton3"] = Enum.UserInputType.MouseButton3,
-    ["MouseWheel"] = Enum.UserInputType.MouseWheel,
-	["Unknown"] = Enum.KeyCode.Unknown,
-	["A"] = Enum.KeyCode.A,
-	["B"] = Enum.KeyCode.B,
-	["C"] = Enum.KeyCode.C,
-	["D"] = Enum.KeyCode.D,
-	["E"] = Enum.KeyCode.E,
-	["F"] = Enum.KeyCode.F,
-	["G"] = Enum.KeyCode.G,
-	["H"] = Enum.KeyCode.H,
-	["I"] = Enum.KeyCode.I,
-	["J"] = Enum.KeyCode.J,
-	["K"] = Enum.KeyCode.K,
-	["L"] = Enum.KeyCode.L,
-	["M"] = Enum.KeyCode.M,
-	["N"] = Enum.KeyCode.N,
-	["O"] = Enum.KeyCode.O,
-	["P"] = Enum.KeyCode.P,
-	["Q"] = Enum.KeyCode.Q,
-	["R"] = Enum.KeyCode.R,
-	["S"] = Enum.KeyCode.S,
-	["T"] = Enum.KeyCode.T,
-	["U"] = Enum.KeyCode.U,
-	["V"] = Enum.KeyCode.V,
-	["W"] = Enum.KeyCode.W,
-	["X"] = Enum.KeyCode.X,
-	["Y"] = Enum.KeyCode.Y,
-	["Z"] = Enum.KeyCode.Z,
-	["F1"] = Enum.KeyCode.F1,
-	["F2"] = Enum.KeyCode.F2,
-	["F3"] = Enum.KeyCode.F3,
-	["F4"] = Enum.KeyCode.F4,
-	["F5"] = Enum.KeyCode.F5,
-	["F6"] = Enum.KeyCode.F6,
-	["F7"] = Enum.KeyCode.F7,
-	["F8"] = Enum.KeyCode.F8,
-	["F9"] = Enum.KeyCode.F9,
-	["F10"] = Enum.KeyCode.F10,
-	["F11"] = Enum.KeyCode.F11,
-	["F12"] = Enum.KeyCode.F12,
-	["Backspace"] = Enum.KeyCode.Backspace,
-	["Tab"] = Enum.KeyCode.Tab,
-    ["Enter"] = Enum.KeyCode.Return,
-	["Escape"] = Enum.KeyCode.Escape,
-	["Space"] = Enum.KeyCode.Space,
-	["Quote"] = Enum.KeyCode.Quote,
-	["Comma"] = Enum.KeyCode.Comma,
-	["Minus"] = Enum.KeyCode.Minus,
-	["Period"] = Enum.KeyCode.Period,
-	["Slash"] = Enum.KeyCode.Slash,
-	["Zero"] = Enum.KeyCode.Zero,
-	["One"] = Enum.KeyCode.One,
-	["Two"] = Enum.KeyCode.Two,
-	["Three"] = Enum.KeyCode.Three,
-	["Four"] = Enum.KeyCode.Four,
-	["Five"] = Enum.KeyCode.Five,
-	["Six"] = Enum.KeyCode.Six,
-	["Seven"] = Enum.KeyCode.Seven,
-	["Eight"] = Enum.KeyCode.Eight,
-	["Nine"] = Enum.KeyCode.Nine,
-	["Semicolon"] = Enum.KeyCode.Semicolon,
-	["Equals"] = Enum.KeyCode.Equals,
-	["LeftBracket"] = Enum.KeyCode.LeftBracket,
-	["BackSlash"] = Enum.KeyCode.BackSlash,
-	["RightBracket"] = Enum.KeyCode.RightBracket,
-	["Backquote"] = Enum.KeyCode.Backquote,
-	["Delete"] = Enum.KeyCode.Delete,
-	["KeypadZero"] = Enum.KeyCode.KeypadZero,
-	["KeypadOne"] = Enum.KeyCode.KeypadOne,
-	["KeypadTwo"] = Enum.KeyCode.KeypadTwo,
-	["KeypadThree"] = Enum.KeyCode.KeypadThree,
-	["KeypadFour"] = Enum.KeyCode.KeypadFour,
-	["KeypadFive"] = Enum.KeyCode.KeypadFive,
-	["KeypadSix"] = Enum.KeyCode.KeypadSix,
-	["KeypadSeven"] = Enum.KeyCode.KeypadSeven,
-	["KeypadEight"] = Enum.KeyCode.KeypadEight,
-	["KeypadNine"] = Enum.KeyCode.KeypadNine,
-	["KeypadPeriod"] = Enum.KeyCode.KeypadPeriod,
-	["KeypadDivide"] = Enum.KeyCode.KeypadDivide,
-	["KeypadMultiply"] = Enum.KeyCode.KeypadMultiply,
-	["KeypadMinus"] = Enum.KeyCode.KeypadMinus,
-	["KeypadPlus"] = Enum.KeyCode.KeypadPlus,
-	["KeypadEnter"] = Enum.KeyCode.KeypadEnter,
-	["KeypadEquals"] = Enum.KeyCode.KeypadEquals,
-	["Up"] = Enum.KeyCode.Up,
-	["Down"] = Enum.KeyCode.Down,
-	["Right"] = Enum.KeyCode.Right,
-	["Left"] = Enum.KeyCode.Left,
-	["Insert"] = Enum.KeyCode.Insert,
-	["Home"] = Enum.KeyCode.Home,
-	["End"] = Enum.KeyCode.End,
-	["PageUp"] = Enum.KeyCode.PageUp,
-	["PageDown"] = Enum.KeyCode.PageDown,
-	["NumLock"] = Enum.KeyCode.NumLock,
-	["CapsLock"] = Enum.KeyCode.CapsLock,
-	["ScrollLock"] = Enum.KeyCode.ScrollLock,
-	["RightShift"] = Enum.KeyCode.RightShift,
-	["LeftShift"] = Enum.KeyCode.LeftShift,
-	["RightControl"] = Enum.KeyCode.RightControl,
-	["LeftControl"] = Enum.KeyCode.LeftControl,
-	["RightAlt"] = Enum.KeyCode.RightAlt,
-	["LeftAlt"] = Enum.KeyCode.LeftAlt,
-}
 
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = `TidalWave v{Gui.CurrentVersion}`
@@ -644,13 +550,15 @@ local function CreateTopBarButton(Properties)
 
 	TopBar.Size += UDim2.fromOffset(Size + 8, 0)
 
+    local Info = TweenInfo.new(0.1)
+
 	function Table:Select(...)
 		for _, v in TopBar:GetChildren() do
 			if v:IsA("TextButton") then
 				if v == Button then
                     local ButtonHover = GetColor("Background/ButtonHover")
 					if v.BackgroundColor3 ~= ButtonHover then
-						TweenService:Create(Button, TweenInfo.new(0.1), {BackgroundColor3 = ButtonHover}):Play()
+						TweenService:Create(Button, Info, {BackgroundColor3 = ButtonHover}):Play()
 					end
 					if typeof(Properties.Function) == "function" then
 						Properties.Function(...)
@@ -658,7 +566,7 @@ local function CreateTopBarButton(Properties)
 				else
                     local Button = GetColor("Background/Button")
 					if v.BackgroundColor3 ~= Button then
-						TweenService:Create(v, TweenInfo.new(0.1), {BackgroundColor3 = Button}):Play()
+						TweenService:Create(v, Info, {BackgroundColor3 = Button}):Play()
 					end
 				end
 			end
@@ -774,28 +682,26 @@ Run(function()
 	function Gui:Notify(Properties: {Text: string, Title: string?, Duration: number?, Type: "Info" | "Warning" | "Error"?})
 		if not Gui.Notifications then return end
 		task.delay(0, function()
-			local Right = Gui.NotificationHorizontalAlignment == "Right"
-			local Bottom = Gui.NotificationVerticalAlignment == "Bottom"
-			local FillDirectionUp = Gui.NotificationFillDirection == "Up"
-            local TextSize = math.max(GetTextSize(Properties.Text, 15, GetFont('Regular'), 1000).X + 60, 260)
-            local BackgroundColor, BackgroundTransparency = GetColor("Background/Notification")
+			local Right, Bottom, FillDirectionUp = Gui.NotificationHorizontalAlignment == "Right", Gui.NotificationVerticalAlignment == "Bottom", Gui.NotificationFillDirection == "Up"
+            local Width = math.max(GetTextSize(Properties.Text, 15, GetFont('Regular'), 1000).X + 60, 260)
+			local YOffset = (29 + (78 * (#Notifications + 1)))
 
-			local Frame = Instance.new("Frame")
+			local Frame = Instance.new('Frame')
 			Frame.Name = "Notification"
-			table.insert(Notifications, Frame)
-			local YOffset = (29 + (78 * #Notifications))
 			Frame.Position = UDim2.new(Right and 1 or 0, Right and 5 or -5, Bottom and 1 or 0, Bottom and FillDirectionUp and -YOffset or YOffset)
-			Frame.Size = UDim2.fromOffset(TextSize, 75)
-			Frame.BackgroundColor3 = BackgroundColor
-			Frame.BackgroundTransparency = BackgroundTransparency
-			Frame.AnchorPoint = Vector2.new(Right and 0 or 1, 0)
+			Frame.Size = UDim2.fromOffset(Width, 75)
+			Frame.BackgroundColor3, Frame.BackgroundTransparency = GetColor("Background/Notification")
+			Frame.AnchorPoint = Right and Vector2.zero or Vector2.xAxis
 			Frame.Parent = NotificationFolder
 			AddCorner(Frame, UDim.new(0, 6))
 
-			local UIStroke = Instance.new("UIStroke")
+            Notifications[#Notifications + 1] = Frame
+
+			local UIStroke = Instance.new('UIStroke')
 			UIStroke.Thickness = 1
 			UIStroke.Color = GetColor('Outline/Notification')
-			UIStroke.BorderStrokePosition = Enum.BorderStrokePosition.Center
+			UIStroke.BorderStrokePosition = Enum.BorderStrokePosition.Inner
+            UIStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 			UIStroke.Parent = Frame
 
 			local TitleShadow = Instance.new("TextLabel")
@@ -855,17 +761,16 @@ Run(function()
 			Progress.BackgroundColor3 = GetColor('Notification/ProgressBar')
 			Progress.BorderSizePixel = 0
 			Progress.Size = UDim2.new(1, -2, 0, 2)
-			Progress.Position = UDim2.new(0, 3, 1, -3)
+			Progress.Position = UDim2.new(0, 3, 1, -4)
 			Progress.Parent = Frame
 
-			Tween(Frame, Info, {AnchorPoint = Vector2.new(Right and 1 or 0, 0)})
-			Tween(Progress, TweenInfo.new(Properties.Duration or 2), {Size = UDim2.fromOffset(0, 2)})
+			local Duration = Properties.Duration or 2
 
-			task.delay(Properties.Duration or 2, function()
-				Right = Gui.NotificationHorizontalAlignment == "Right"
-				Bottom = Gui.NotificationVerticalAlignment == "Bottom"
-				FillDirectionUp = Gui.NotificationFillDirection == "Up"
-				Tween(Frame, Info, {AnchorPoint = Vector2.new(Right and 0 or 1, 0)})
+			Tween(Frame, Info, {AnchorPoint = Right and Vector2.xAxis or Vector2.zero})
+			TweenService:Create(Progress, TweenInfo.new(Duration), {Size = UDim2.fromOffset(0, 2)}):Play()
+
+			task.delay(Duration, function()
+				Tween(Frame, Info, {AnchorPoint = Right and Vector2.zero or Vector2.xAxis})
 				task.wait(0.25)
 
 				table.remove(Notifications, table.find(Notifications, Frame))
@@ -873,7 +778,8 @@ Run(function()
 
 				for i, v in Notifications do
 					YOffset = (29 + (78 * i))
-					Tween(v, Info, {Position = UDim2.new(Right and 1 or 0, Right and 5 or -5, Bottom and 1 or 0, Bottom and FillDirectionUp and -YOffset or YOffset)}, NotificationTweens.Tweens2)
+                    local Goal = {Position = UDim2.new(Right and 1 or 0, Right and 5 or -5, Bottom and 1 or 0, Bottom and FillDirectionUp and -YOffset or YOffset)}
+					Tween(v, Info, Goal, NotificationTweens.Tweens2)
 				end
 			end)
 		end)
@@ -1053,6 +959,12 @@ local Templates; Templates = {
             end
         end
 
+        function Keybind:IsPressed()
+            local KeyCode = Keybind.Keybind and Enum.KeyCode:FromName(Keybind.Keybind)
+            if KeyCode and UIS:IsKeyDown(KeyCode) then return true end
+            return false
+        end
+
         local Name = Properties.Name:gsub(' ', '')
 
 		function Keybind:Save(Tab)
@@ -1137,21 +1049,18 @@ local Templates; Templates = {
 		SetIcon(ResetButtonImage, "rotate-cw")
 		ResetButtonImage.Parent = ResetButton
 
-		local Info = TweenInfo.new(0.2)
-
 		function Toggle:Toggle()
-			Toggle.Enabled = not Toggle.Enabled
-            TweenEnabledBar(EnabledBar, Toggle.Enabled)
-			if Properties.Function then
-				task.spawn(Properties.Function, Toggle.Enabled)
-			elseif Properties.Enabled and Toggle.Enabled then
-				task.spawn(Properties.Enabled)
-			end
-			if not Toggle.Enabled then
-				for i, v in Toggle.Connections do
-					v:Disconnect()
+			self.Enabled = not self.Enabled
+            TweenEnabledBar(EnabledBar, self.Enabled)
+			if self.Enabled then
+				if Properties.Enabled then
+					task.spawn(Properties.Enabled)
 				end
-				table.clear(Toggle.Connections)
+			else
+				self:DisconnectAll()
+			end
+			if Properties.Function then
+				task.spawn(Properties.Function, self.Enabled)
 			end
 		end
 
@@ -1160,8 +1069,10 @@ local Templates; Templates = {
 			Frame.Visible = Toggle.Visible
 		end
 
+		local Name = Properties.Name:gsub(' ', '')
+
 		function Toggle:Save(Tab)
-			Tab[Properties.Name:gsub(" ", "")] = {Enabled = Toggle.Enabled}
+			Tab[Name] = {Enabled = Toggle.Enabled}
 		end
 
 		function Toggle:Load(Tab)
@@ -1174,7 +1085,9 @@ local Templates; Templates = {
 			Toggle:Toggle()
 		end
 
-		Button.MouseButton1Click:Connect(Toggle.Toggle)
+		Button.MouseButton1Click:Connect(function()
+			Toggle:Toggle()
+		end)
 		ResetButton.MouseButton1Click:Connect(function()
 			if Toggle.Enabled ~= (Properties.Default or false) then
 				Toggle:Toggle()
@@ -1183,7 +1096,7 @@ local Templates; Templates = {
 
 		Toggle.Object = Frame
 
-		Properties.Module.Options[Properties.Name:gsub(" ", "")] = Toggle
+		Properties.Module.Options[Name] = Toggle
 
 		return Toggle
 	end,
@@ -1234,13 +1147,28 @@ local Templates; Templates = {
 			Background.Visible = Visible
 		end
 
+        local Name = Properties.Name:gsub(' ', '')
+
+        function TextBox:Save(Tab)
+            Tab[Name] = TextBoxObject.Text
+        end
+
+        function TextBox:Load(Text)
+            if typeof(Text) == 'string' then
+                TextBoxObject.Text = Text
+                if Properties.Function then
+                    Properties.Function(TextBoxObject.Text, true)
+                end
+            end
+        end
+
 		TextBoxObject.FocusLost:Connect(function()
 			if Properties.Function then
 				Properties.Function(TextBoxObject.Text)
 			end
 		end)
 
-		Properties.Module.Options[Properties.Name:gsub(" ", "")] = TextBox
+		Properties.Module.Options[Name] = TextBox
 
 		return TextBox
 	end,
@@ -2697,7 +2625,7 @@ local Templates; Templates = {
 			Arrow.Position = UDim2.new(1, 0, 0, math.clamp((ColorStrip.AbsoluteSize.Y - (ColorStrip.AbsoluteSize.Y * ColorPicker.V)) / UIScale.Scale, 0, MaxSize))
         end
 
-        local function UpdateFromrgbt(Ignore, IgnoreMainPositions)
+        local function UpdateFromRGBT(Ignore, IgnoreMainPositions)
             ColorPicker.Color = Color3.fromRGB(ColorPicker.R, ColorPicker.G, ColorPicker.B)
             ColorPicker.T = ColorPicker.Transparency
             ColorPicker.H, ColorPicker.S, ColorPicker.V = ColorPicker.Color:ToHSV()
@@ -2787,7 +2715,7 @@ local Templates; Templates = {
             Handle.Text = ""
             AddCorner(Handle, UDim.new(1, 0))
 
-            local Decimals = SliderProperties.Decimals or 1
+            local Decimal = SliderProperties.Decimal or 1
 
             local function CalculatePosition(Type, CustomPosition)
                 local X = Type == "Mouse" and (UIS:GetMouseLocation().X - SliderFrame.AbsolutePosition.X) / UIScale.Scale or Type == "Slider" and Handle.Position.X.Offset or Type == "Custom" and CustomPosition
@@ -2796,7 +2724,7 @@ local Templates; Templates = {
                 local Pos = math.clamp(X, 0, MaxSize)
                 local Scale = math.clamp(Pos / MaxSize, 0, 1)
 
-                return Pos, math.round((Scale * SliderProperties.Max) * Decimals) / Decimals
+                return Pos, math.round((Scale * SliderProperties.Max) * Decimal) / Decimal
             end
 
             local function CalculatePositionFromValue(Value)
@@ -2814,7 +2742,7 @@ local Templates; Templates = {
                 Input.Text = tostring(Value)
 
                 ColorPicker[SliderProperties.Ref] = Value
-                UpdateFromrgbt()
+                UpdateFromRGBT()
                 FireCallback()
             end
 
@@ -2827,9 +2755,9 @@ local Templates; Templates = {
                     RightBar.Size = UDim2.fromOffset(SliderFrame.Size.X.Offset - Pos, 3)
                     RightBar.Position = UDim2.fromOffset(Pos, 9)
                     ColorPicker[SliderProperties.Ref] = Val
-                    UpdateFromrgbt(Ignore, IgnoreMainPositions)
+                    UpdateFromRGBT(Ignore, IgnoreMainPositions)
                 end
-                Input.Text = tostring(math.floor(ColorPicker[SliderProperties.Ref]))
+                Input.Text = tostring(math.floor(ColorPicker[SliderProperties.Ref] * Decimal) / Decimal)
             end
 
             local StartPos = CalculatePositionFromValue(ColorPicker[SliderProperties.Ref])
@@ -2915,7 +2843,7 @@ local Templates; Templates = {
             Ref = "Transparency",
             Min = 0,
             Max = 1,
-            Decimals = 100
+            Decimal = 100
         })
 
         ResetButton.MouseButton1Click:Connect(function()
@@ -2963,6 +2891,11 @@ local Templates; Templates = {
         UpdateMainDisplay()
         UpdateMainPositions()
 
+		RedSlider:InputNumber(math.floor(DefaultColor.R * 255), true, true)
+		GreenSlider:InputNumber(math.floor(DefaultColor.G * 255), true, true)
+		BlueSlider:InputNumber(math.floor(DefaultColor.B * 255), true, true)
+		TransparencySlider:InputNumber(DefaultTransparency, true)
+
         ColorDisplay.MouseButton1Click:Connect(function()
             ColorPickerDropdown.Visible = not ColorPickerDropdown.Visible
         end)
@@ -2983,15 +2916,18 @@ local Templates; Templates = {
         RGBInput.FocusLost:Connect(function()
             local Numbers = {}
             for Num in RGBInput.Text:gmatch('%d+') do
-                table.insert(Numbers, Num)
+				Numbers[#Numbers + 1] = Num
             end
-            for i = 1, math.min(#Numbers, 4) do
-                SliderIndexes[i]:InputNumber(tonumber(Numbers[i]), i == #Numbers, i == #Numbers)
+			local Len = math.min(#Numbers, 4)
+            for i = 1, Len do
+                SliderIndexes[i]:InputNumber(tonumber(Numbers[i]), i == Len, i == Len)
             end
         end)
 
+		local Name = Properties.Name:gsub(' ', '')
+
         function ColorPicker:Save(Tab)
-			Tab[Properties.Name:gsub(" ", "")] = {
+			Tab[Name] = {
 				R = ColorPicker.R,
 				G = ColorPicker.G,
 				B = ColorPicker.B,
@@ -3014,7 +2950,7 @@ local Templates; Templates = {
         function ColorPicker:SetColor(Color)
             RedSlider:InputNumber(math.floor(Color.R * 255), true, true)
             GreenSlider:InputNumber(math.floor(Color.G * 255), true, true)
-            BlueSlider:InputNumber(math.floor(Color.B * 255))
+            BlueSlider:InputNumber(math.floor(Color.B * 255), true, false)
         end
 
         function ColorPicker:SetTransparency(Transparency)
@@ -3023,7 +2959,7 @@ local Templates; Templates = {
 
         ColorPicker.Object = Frame
 
-        Properties.Module.Options[Properties.Name:gsub(" ", "")] = ColorPicker
+        Properties.Module.Options[Name] = ColorPicker
 
         return ColorPicker
     end
@@ -4061,17 +3997,15 @@ function Gui:CreateCategory(Properties)
             end)
         end)
 
-        local ModuleToggledString = "%s has been <font color = '#%s'>%s</font>"
-
 		function Module:Toggle(NoNotify)
 			self.Enabled = not self.Enabled
 			if not NoNotify then
-                local Text = self.Enabled and 'Enabled' or 'Disabled'
-                local Color = GetColor(`Notification/Module{Text}`):ToHex()
+                local Toggled = self.Enabled and 'Enabled' or 'Disabled'
+                local Color = GetColor(`Notification/Module{Toggled}`):ToHex()
 				Notify({
 					Title = "Module Toggled",
-					Text = ModuleToggledString:format(Properties.Name, Color, Text),
-					Duration = 2,
+					Text = `{Properties.Name} has been <font color = "#{Color}">{Toggled}</font>`,
+					Duration = Gui.ModuleNotificationDuration,
 				})
 			end
 
@@ -4084,10 +4018,7 @@ function Gui:CreateCategory(Properties)
                 end
 			else
 				ModuleList:RemoveModule(Properties.Name)
-				for _, v in Module.Connections do
-					v:Disconnect()
-				end
-				table.clear(Module.Connections)
+				Module:DisconnectAll()
 			end
             if Properties.Function then
 				task.spawn(Properties.Function, Module.Enabled)
@@ -4908,8 +4839,10 @@ do
 			ArrowTween:Play()
 		end
 
+		local Name = Properties.Name:gsub(' ', '')
+
 		function Dropdown:Save(Tab)
-			Tab[Properties.Name:gsub(" ", "")] = Dropdown.Value
+			Tab[Name] = Dropdown.Value
 		end
 
 		function Dropdown:Load(Value)
@@ -4934,7 +4867,7 @@ do
 
 		Dropdown.Object = Frame
 
-		GuiMenu.Options[Properties.Name:gsub(" ", "")] = Dropdown
+		GuiMenu.Options[Name] = Dropdown
 
 		return Dropdown
     end
@@ -4959,7 +4892,7 @@ do
     for i, v in BuiltInThemes.TidalWave do
         if i == "BuiltIn" then continue end
         for i2, v2 in v do
-            table.insert(ColorPickers, GuiMenu:CreateColorPicker({
+			ColorPickers[#ColorPickers + 1] = GuiMenu:CreateColorPicker({
                 Name = i == "Main" and i2 or `{i} {i2}`,
                 Default = v2.Color,
                 Visible = false,
@@ -4967,7 +4900,7 @@ do
                     SetColor(`{i}/{i2}`, Color, Transparency)
                     UpdateTheme()
                 end
-            }))
+            })
         end
     end
 end
@@ -5196,6 +5129,14 @@ Run(function()
         Function = function(Val)
             Gui.NotificationFillDirection = Val
         end
+	})
+
+	Notifications:CreateSlider({
+		Name = 'Module Toggled Duration',
+		Default = 2,
+		Min = 0.5,
+		Max = 4,
+		Decimal = 100
 	})
 end)
 
@@ -5491,20 +5432,10 @@ local HudTopBar = CreateTopBarButton({
 	end,
 })
 
-function Gui:SaveOptions(Options)
-	if not Options then return end
-	local Tab = {}
-	for i, v in Options do
-		if not v.Save then continue end
-		v:Save(Tab)
-	end
-	return Tab
-end
-
-function Gui:LoadOptions(Module, JsonOptions)
+function Gui:LoadOptions(Options, JsonOptions)
 	for i, v in JsonOptions do
-		local Option = Module.Options[i]
-		if Option then
+		local Option = Options[i]
+		if Option and Option.Load then
 			Option:Load(v)
 		end
 	end
@@ -5638,12 +5569,17 @@ function Gui:Load(Profile)
 			local Module = Gui.Modules[i]
 			if not Module then continue end
 			if Module.Options and v.Options then
-				Gui:LoadOptions(Module, v.Options)
+				Gui:LoadOptions(Module.Options, v.Options)
 			end
-			if Module.Hold ~= v.Hold then
+            if Module.Keybinds and v.Keybinds then
+                Gui:LoadOptions(Module.Keybinds, v.Keybinds)
+            end
+            if Module.Keybind ~= v.Keybind and typeof(v.Keybind) == 'string' then
+                Module:SetKeybind(v.Keybind)
+            end
+			if Module.Hold ~= v.Hold and typeof(v.Hold) == 'boolean' then
 				Module:ToggleHold()
 			end
-			Module:SetKeybind(v.Keybind)
 			if Module.Enabled ~= v.Enabled then
 				Module:Toggle(true)
 			end
@@ -5657,6 +5593,16 @@ function Gui:Load(Profile)
             Button:SetKeybind(v.Keybind)
         end
 	end
+end
+
+function Gui:SaveOptions(Options)
+	if not Options then return end
+	local Tab = {}
+	for _, v in Options do
+		if not v.Save then continue end
+		v:Save(Tab)
+	end
+	return Tab
 end
 
 local function SaveThemes()
@@ -5756,13 +5702,15 @@ function Gui:Save(Profile)
 			Keybind = v.Keybind,
 			Hold = v.Hold,
 			Options = Gui:SaveOptions(v.Options),
+            Keybinds = Gui:SaveOptions(v.Keybinds),
 		}
 	end
 
     for i, v in Gui.Buttons do
         Settings.Buttons[i] = {
             Keybind = v.Keybind,
-            Options = Gui:SaveOptions(v.Options)
+            Options = Gui:SaveOptions(v.Options),
+            Keybinds = Gui:SaveOptions(v.Keybinds)
         }
     end
 
@@ -6196,11 +6144,11 @@ local AllowedUserInputTypes = {
 Gui:Clean(UIS.InputBegan:Connect(function(Input)
 	local TextBox = UIS:GetFocusedTextBox()
 	if TextBox then return end
-	if Gui.Binding and ((Input.KeyCode == Keys.Unknown and not AllowMouseBinding.Enabled) or Input.KeyCode == Keys.Escape) then
+	if Gui.Binding and ((Input.KeyCode == Enum.KeyCode.Unknown and not AllowMouseBinding.Enabled) or Input.KeyCode == Enum.KeyCode.Escape) then
 		Gui.Binding:SetKeybind(Gui.Binding.Keybind)
 		Gui.Binding = nil
-	elseif ((AllowMouseBinding.Enabled and AllowedUserInputTypes[Input.UserInputType.Name] or Input.KeyCode ~= Keys.Unknown) and Input.KeyCode ~= Keys.Escape) then
-        local Key = Input.KeyCode == Keys.Unknown and AllowMouseBinding.Enabled and AllowedUserInputTypes[Input.UserInputType.Name] or Input.KeyCode.Name
+	elseif ((AllowMouseBinding.Enabled and AllowedUserInputTypes[Input.UserInputType.Name] or Input.KeyCode ~= Enum.KeyCode.Unknown) and Input.KeyCode ~= Enum.KeyCode.Escape) then
+        local Key = Input.KeyCode == Enum.KeyCode.Unknown and AllowMouseBinding.Enabled and AllowedUserInputTypes[Input.UserInputType.Name] or Input.KeyCode.Name
 		table.insert(PressedKeys, Key)
 		if Gui.Binding then
 			Gui.Binding:SetKeybind(table.concat(PressedKeys, "+"))
@@ -6247,7 +6195,6 @@ Gui:Clean(UIS.InputBegan:Connect(function(Input)
 					Modal.Visible = true
 				end
 			else
-                local ModuleToggled = false
 				for _, Module in Gui.Modules do
                     if TopBar.Visible and AllowedUserInputTypes[Module.Keybind] then continue end
 					if CheckKeybind(Module.Keybind, Key) then
@@ -6259,26 +6206,21 @@ Gui:Clean(UIS.InputBegan:Connect(function(Input)
 						else
 							Module:Toggle()
 						end
-                        ModuleToggled = true
-						break
 					end
 				end
-                if not ModuleToggled then
-                    for _, Button in Gui.Buttons do
-                        if TopBar.Visible and AllowedUserInputTypes[Button.Keybind] then continue end
-                        if CheckKeybind(Button.Keybind, Key) then
-                            Button:Toggle()
-                            break
-                        end
-                    end
-                end
+                for _, Button in Gui.Buttons do
+					if TopBar.Visible and AllowedUserInputTypes[Button.Keybind] then continue end
+					if CheckKeybind(Button.Keybind, Key) then
+						Button:Toggle()
+					end
+				end
 			end
 		end
 	end
 end))
 
 UIS.InputEnded:Connect(function(Input)
-    local Key = Input.KeyCode == Keys.Unknown and AllowMouseBinding.Enabled and AllowedUserInputTypes[Input.UserInputType.Name] or Input.KeyCode.Name
+    local Key = Input.KeyCode == Enum.KeyCode.Unknown and AllowMouseBinding.Enabled and AllowedUserInputTypes[Input.UserInputType.Name] or Input.KeyCode.Name
 	local Index = table.find(PressedKeys, Key)
 	if not Index then return end
 	table.remove(PressedKeys, Index)

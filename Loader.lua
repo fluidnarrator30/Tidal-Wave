@@ -43,15 +43,6 @@ if writefile and isfile then
     end
 end
 
-local function GetTableLength(Tab)
-    local Len = 0
-    for _ in Tab do
-        Len += 1
-    end
-
-    return Len
-end
-
 local function DownloadFile(Path, Function)
 	if not isfile(Path) then
         local NewPath = Path:gsub("TidalWave/", "")
@@ -142,12 +133,12 @@ if not shared.TidalWaveDev then
 end
 
 local GameSupported = isfile(`TidalWave/Games/{game.PlaceId}.lua`)
-local CurrentLoadAmount = 0
-local LoadAmount = GameSupported and 6 or 5
+local CurrentLoaded = 0
+local AmountToLoad = GameSupported and 6 or 5
 
 local function IncrementBar()
-    CurrentLoadAmount += 1
-    TweenService:Create(ProgressBarFill, TweenInfo.new(0.4, Enum.EasingStyle.Exponential, Enum.EasingDirection.Out), {Size = UDim2.fromScale(CurrentLoadAmount / LoadAmount, 1)}):Play()
+    CurrentLoaded += 1
+    TweenService:Create(ProgressBarFill, TweenInfo.new(0.4, Enum.EasingStyle.Exponential, Enum.EasingDirection.Out), {Size = UDim2.fromScale(CurrentLoaded / AmountToLoad, 1)}):Play()
 end
 
 local function Load(Path, Name)
@@ -172,13 +163,13 @@ local function Load(Path, Name)
     end
 end
 
-shared.TidalWaveVersion = "2.1.1-beta"
+shared.TidalWaveVersion = "2.1.2-beta"
 shared.TidalWave = Load(`Guis/{Gui}.lua`, "Gui")
 TidalWave = shared.TidalWave
 TidalWave.Libraries = {}
 TidalWave.Libraries.CharacterLib = Load("Libraries/CharacterLib.lua", "CharacterLib")
 TidalWave.Libraries.Drawing = Load("Libraries/Drawing.lua", "Drawing")
-TidalWave.Libraries.CustomLocalMethods = Load("Libraries/CustomLocalMethods.lua", "CustomLocalMethods")
+TidalWave.Libraries.ObjectFunctions = Load("Libraries/ObjectFunctions.lua", "ObjectFunctions")
 TidalWave.Libraries.Prediction = Load('Libraries/Prediction.lua', 'Prediction')
 Load("Games/Universal.lua", "Universal")
 
