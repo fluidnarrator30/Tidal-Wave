@@ -56,6 +56,29 @@ TidalWave:Clean(workspace:GetPropertyChangedSignal('CurrentCamera'):Connect(func
     Camera = workspace.CurrentCamera or workspace:FindFirstChildOfClass('Camera')
 end))
 
+Run(function() -- CharacterLib
+    local function ChildAdded(Child)
+        if Child.ClassName == 'Model' then
+            local Animate = Child:WaitForChild('Animate', 5)
+            if Animate and Animate.ClassName == 'Script' then
+                CharacterLib:AddCharacter(Child)
+            end
+        end
+    end
+    TidalWave:Clean(workspace.ChildAdded:Connect(ChildAdded))
+    TidalWave:Clean(workspace.ChildRemoved:Connect(function(Child)
+        if Child.ClassName == 'Model' then
+            local Character = CharacterLib:FindCharacter(Child, {NPCS = true})
+            if Character then
+                CharacterLib:RemoveCharacter(Character)
+            end
+        end
+    end))
+    for _, v in workspace:GetChildren() do
+        task.spawn(ChildAdded, v)
+    end
+end)
+
 Run(function() -- Combat
     Run(function() -- SilentAimbot
         local SilentAimbot, WallCheck, Part, Fov, Circle, CircleObject, OutlineObject, OutlineColor, FillColor, OutlineTransparency, FillTransparency, Thickness
@@ -129,7 +152,8 @@ Run(function() -- Combat
                         Range = Fov.Value,
                         WallCheck = WallCheck.Enabled,
                         Origin = Tab.origin,
-                        Players = true
+                        Players = true,
+                        NPCS = true
                     })
 
                     if Character then
