@@ -199,9 +199,9 @@ function module.SolveTrajectory(origin, projectileSpeed, gravity, targetPos, tar
 		for i = 1, 100 do
 			q -= (.5 * playerGravity) * estTime
 			local velo = targetVelocity * 0.016
-			local ray = workspace.Raycast(workspace, Vector3.new(targetPos.X, targetPos.Y, targetPos.Z), Vector3.new(velo.X, (q * estTime) - playerHeight, velo.Z), params)
+			local ray = workspace.Raycast(workspace, vector.create(targetPos.X, targetPos.Y, targetPos.Z), vector.create(velo.X, (q * estTime) - playerHeight, velo.Z), params)
 			if ray then
-				local newTarget = ray.Position + Vector3.new(0, playerHeight, 0)
+				local newTarget = ray.Position + vector.create(0, playerHeight, 0)
 				estTime -= math.sqrt(((targetPos - newTarget).Magnitude * 2) / playerGravity)
 				targetPos = newTarget
 				j = (targetPos - origin).Y
@@ -233,14 +233,14 @@ function module.SolveTrajectory(origin, projectileSpeed, gravity, targetPos, tar
 			local d = (h + p*t)/t
 			local e = (j + q*t - l*t*t)/t
 			local f = (k + r*t)/t
-			return origin + Vector3.new(d, e, f)
+			return origin + vector.create(d, e, f)
 		end
 	elseif gravity == 0 then
 		local t = (disp.Magnitude / projectileSpeed)
 		local d = (h + p*t)/t
 		local e = (j + q*t - l*t*t)/t
 		local f = (k + r*t)/t
-		return origin + Vector3.new(d, e, f)
+		return origin + vector.create(d, e, f)
 	end
 end
 

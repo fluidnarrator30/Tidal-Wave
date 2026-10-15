@@ -42,19 +42,19 @@ function Methods:FindSpecificChildWhichIsA(Obj, Class, Index)
 end
 
 function Methods:FindSpecificDescendant(Obj, Name, Index)
-    return FindSpecificObj(Obj, Index, 'GetChildren', function(Obj)
+    return FindSpecificObj(Obj, Index, 'GetDescendants', function(Obj)
         return Obj.Name == Name
     end)
 end
 
 function Methods:FindSpecificDescendantOfClass(Obj, Class, Index)
-    return FindSpecificObj(Obj, Index, 'GetChildren', function(Obj)
+    return FindSpecificObj(Obj, Index, 'GetDescendants', function(Obj)
         return Obj.ClassName == Class
     end)
 end
 
 function Methods:FindSpecificDescendantWhichIsA(Obj, Class, Index)
-    return FindSpecificObj(Obj, Index, 'GetChildren', function(Obj)
+    return FindSpecificObj(Obj, Index, 'GetDescendants', function(Obj)
         return Obj:IsA(Class)
     end)
 end
@@ -69,6 +69,18 @@ end
 
 function Methods:FindFirstDescendantWhichIsA(Obj, Class)
     return Methods:FindSpecificDescendantWhichIsA(Obj, Class, 1)
+end
+
+function Methods:FindFirstDescendantOfClassWithName(Obj, Class, Name)
+    return FindSpecificObj(Obj, 1, 'GetDescendants', function(Obj)
+        return Obj.ClassName == Class and Obj.Name == Name
+    end)
+end
+
+function Methods:FindFirstDescendantWhichIsAWithName(Obj, Class, Name)
+    return FindSpecificObj(Obj, 1, 'GetDescendants', function(Obj)
+        return Obj:IsA(Class) and Obj.Name == Name
+    end)
 end
 
 local function WaitForChildFunction(Obj, TimeOut, GetMethod, AddedMethod, AddedFunction)
@@ -192,7 +204,7 @@ function Methods:FindFirstChildWhichIsAWithName(Obj, Class, Name)
     end)
 end
 
-local Keywords = {
+const Keywords = {
 	['nil'] = true,
 	['for'] = true,
 	['do'] = true,
@@ -216,9 +228,10 @@ local Keywords = {
 	['elseif'] = true,
 	['in'] = true,
 	['self'] = true,
+    ['const'] = true
 }
 
-function Methods:GetFullName(Obj)
+function Methods:GetFullName(Obj: Instance): string?
     if typeof(Obj) ~= 'Instance' then return nil end
     if Obj == game then return 'game' end
     if Obj.Parent == nil then return nil end
@@ -237,19 +250,18 @@ function Methods:GetFullName(Obj)
         if Obj == Plr then
             Name = '.LocalPlayer'
         elseif Obj.ClassName == 'Model' and Characters[Obj] then
-            local Length = #Parts
-            Parts[Length + 1] = {Name = '.Character'}
-            Parts[Length + 2] = {Name = `.{Characters[Obj].Name}`}
+            table.insert(Parts, {Name = '.Character'})
+            table.insert(Parts, {Name = `.{Characters[Obj].Name}`})
             Obj = Players
             break
         else
             Name = Obj.Name:match('^[%a_][%w_]*$') and not Keywords[Obj.Name] and `.{Obj.Name}` or `['{Obj.Name}']`
         end
 
-        Parts[#Parts + 1] = {
+        table.insert(Parts, {
             Name = Name,
-            DebugId = Obj.Parent[Obj.Name] ~= Obj and Obj:GetDebugId() or nil
-        }
+            DebugID = Obj.Parent[Obj.Name] ~= Obj and Obj:GetDebugId() or nil
+        })
 
         Obj = Obj.Parent
     end
@@ -268,11 +280,11 @@ function Methods:GetFullName(Obj)
     return FullName
 end
 
-function Methods:SafeRef(Obj, Path)
+function Methods:SafeRef(Obj: Instance, Path: {string}): Instance?
     if not Obj then return nil end
     
-    for _, v in Path do
-        local NewObj = Obj:FindFirstChild(v)
+    for _, Str in Path do
+        local NewObj = Obj:FindFirstChild(Str)
         if NewObj then
             Obj = NewObj
         else

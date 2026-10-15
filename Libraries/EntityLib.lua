@@ -10,12 +10,14 @@ local UIS: UserInputService = GetService('UserInputService')
 local TidalWave = shared.TidalWave
 local Libraries = TidalWave.Libraries
 local Signal = Libraries.Signal
-local Whitelist = Libraries.Whitelist
+local ObjectFunctions = Libraries.ObjectFunctions
+local Whitelist = {Get = function() return nil, true end}
 
 local Plr: Player = Players.LocalPlayer
 local Camera: Camera = workspace.CurrentCamera or workspace:FindFirstChildOfClass('Camera')
 
 local EntityLib = {
+    Player = Plr,
     Alive = false,
     Running = false,
     List = {},
@@ -31,7 +33,19 @@ local EntityLib = {
     })
 }
 
-local function LoopClean(Tab)
+const FindFirstChildOfClass = game.FindFirstChildOfClass
+const Raycast = workspace.Raycast
+const UIS_GetMouseLocation = UIS.GetMouseLocation
+
+const function GetMouseLocation()
+    if UIS.TouchEnabled then
+        return Camera.ViewportSize / 2
+    end
+
+    return UIS_GetMouseLocation(UIS)
+end
+
+const function LoopClean(Tab)
     for _, v in Tab do
         if typeof(v) == 'table' then
             LoopClean(v)
@@ -44,73 +58,22 @@ local function LoopClean(Tab)
     table.clear(Tab)
 end
 
-function EntityLib:WaitForChild(Obj, Name, TimeOut, Property)
-    local Object = if Property then Obj[Name] else Obj:FindFirstChildOfClass(Name)
-    if Object then
-        return Object
+function EntityLib:WaitForRootPart(Obj: Humanoid, TimeOut: number?)
+    if Obj.RootPart then
+        return Obj.RootPart
     end
 
-    if Property then
-        TimeOut = os.clock() + (TimeOut or 9e9)
-        repeat
-            task.wait()
-            
-            local Prop = Obj[Name]
-            if Prop then
-                return Prop
-            end
-        until os.clock() >= TimeOut
+    TimeOut = os.clock() + (TimeOut or math.huge)
+    repeat
+        task.wait()
+    until Obj.RootPart or os.clock() >= TimeOut
 
-        return nil
-    else
-        if EntityLib.Connections[Obj] then return end
-
-        local Thread = coroutine.running()
-
-        local Con, DelayThread
-
-        local function Disconnect()
-            if Con then
-                Con:Disconnect()
-                Con = nil
-            end
-            if DelayThread then
-                task.cancel(DelayThread)
-                DelayThread = nil
-            end
-            if EntityLib.Connections and EntityLib.Connections[Obj] then
-                EntityLib.Connections[Obj] = nil
-            end
-        end
-
-        EntityLib.Connections[Obj] = {
-            Disconnect = function()
-                Disconnect()
-                coroutine.resume(Thread, nil)
-            end
-        }
-
-        Con = Obj.ChildAdded:Connect(function(Child)
-            if Child:IsA(Name) then
-                Disconnect()
-                coroutine.resume(Thread, Child)
-            end
-        end)
-
-        if TimeOut then
-            DelayThread = task.delay(TimeOut, function()
-                DelayThread = nil
-                Disconnect()
-                coroutine.resume(Thread, nil)
-            end)
-        end
-
-        return coroutine.yield()
-    end
+    return Obj.RootPart
 end
 
 function EntityLib:IsTeammate(Entity)
     if Entity.NPC then return false end
+    if not select(2, Whitelist:Get(Entity.Player)) then return true end
     if TidalWave:IsFriend(Entity.Player) then return true end
     if not Plr.Team then return false end
     if not Entity.Player.Team then return false end
@@ -154,10 +117,10 @@ function EntityLib:GetTeamUpdateConnections(Entity)
     return {}
 end
 
-function EntityLib:GetCharacterProperties(Entity)
+function EntityLib:GetEntityProperties(Entity)
     return {
-        Health = Entity and Entity.Humanoid.Health or 0,
-        MaxHealth = Entity and Entity.Humanoid.MaxHealth or 0
+        Health = Entity.Humanoid.Health or 0,
+        MaxHealth = Entity.Humanoid.MaxHealth or 0
     }
 end
 
@@ -169,56 +132,58 @@ function EntityLib:GetUpdateConnections(Entity)
 end
 
 function EntityLib:CanAttack(Entity)
-    if Entity.Player and not select(2, Whitelist:Get(Entity.Player)) then
-        return false
-    end
-
-    return Entity.Health > 0 and Entity.Character:FindFirstChildOfClass('ForceField') == nil
+    return Entity.Health > 0 and FindFirstChildOfClass(Entity.Character, 'ForceField') == nil
 end
 
-function EntityLib:GetTeamColor(Entity)
+function EntityLib:GetEntityColor(Entity)
     local Player = Entity and Entity.Player or nil
-    if TidalWave.Menus.Friends.Options.UseFriends.Enabled then
+    if TidalWave.Menus.Friends.Options.UseFriends.Enabled and Player then
         local FriendColor = TidalWave:GetFriendColor(Player)
         if FriendColor then
             return FriendColor
         end
     end
 
-    if TidalWave.Menus.Config.Options.UseTeamColor.Enabled then
-        local TeamColor = Player and Player.Team and Player.TeamColor
-        if TeamColor and tostring(TeamColor) ~= 'White' then
-            return TeamColor.Color
-        end
-    end
-
-    return nil
+    local TeamColor = Player and Player.Team and Player.TeamColor
+	if TeamColor and tostring(TeamColor) ~= 'White' then
+		return TeamColor.Color
+	else
+		return nil
+	end
 end
 
 local Params = RaycastParams.new()
 Params.RespectCanCollide = true
 
-function EntityLib:WallCheck(Origin, Target)
+function EntityLib:WallCheck(Origin, Target, ExtraIgnoreList)
     local IgnoreList = {EntityLib.Character}
     for _, Entity in EntityLib.List do
         table.insert(IgnoreList, Entity.Character)
     end
 
+    if typeof(ExtraIgnoreList) == 'Instance' then
+        table.insert(IgnoreList, ExtraIgnoreList)
+    elseif typeof(ExtraIgnoreList) == 'table' then
+        for _, Part in ExtraIgnoreList do
+            table.insert(IgnoreList, Part)
+        end
+    end
+
     Params.FilterDescendantsInstances = IgnoreList
 
-	return workspace.Raycast(workspace, Origin, (Target - Origin), Params)
+	return Raycast(workspace, Origin, (Target - Origin), Params)
 end
 
 local function InsertCharacter(Entity, Part, Range, MouseLocation, Table)
-    local Vector, OnScreen = Camera:WorldToViewportPoint(Part.Position)
-    if OnScreen then
-        local Magnitude = (MouseLocation - Vector2.new(Vector.X, Vector.Y)).Magnitude
+    local ScreenPoint, Visible = Camera.WorldToViewportPoint(Camera, Part.Position)
+    if Visible then
+        local Magnitude = (MouseLocation - Vector2.new(ScreenPoint.X, ScreenPoint.Y)).Magnitude
         if Magnitude <= Range then
             table.insert(Table, {
                 Entity = Entity,
                 Magnitude = Magnitude,
                 Part = Part,
-                Vector = Vector
+                Vector = ScreenPoint
             })
         end
     end
@@ -226,7 +191,7 @@ end
 
 function EntityLib:GetClosestEntityWithinMouse(Settings)
 	if EntityLib.Alive then
-		local MouseLocation = Settings.MouseOrigin or UIS.GetMouseLocation(UIS)
+		local MouseLocation = Settings.MouseOrigin or GetMouseLocation()
         local WithinMouse = {}
         local Part = Settings.Part or 'Root'
         local Range = Settings.Range or math.huge
@@ -263,7 +228,7 @@ function EntityLib:GetClosestEntityWithinMouse(Settings)
 		end)
 
 		for _, Tab in WithinMouse do
-			if Settings.WallCheck and EntityLib:WallCheck(Origin, Tab.Entity[Part].Position) then continue end
+			if Settings.WallCheck and EntityLib:WallCheck(Origin, Tab.Entity[Part].Position, Settings.IgnoreList) then continue end
 			return Tab.Entity, Tab.Vector
 		end
 	end
@@ -277,9 +242,6 @@ function EntityLib:GetClosestEntity(Settings)
         local ClosestEntities = {}
         local Part = Settings.Part or 'Root'
         local Range = Settings.Range or math.huge
-        local Sort = Settings.Sort or function(a, b)
-			return a.Magnitude < b.Magnitude
-		end
 
 		for _, Entity in EntityLib.List do
 			if Entity.Player and not Settings.Players then continue end
@@ -296,10 +258,12 @@ function EntityLib:GetClosestEntity(Settings)
 			end
 		end
 
-		table.sort(ClosestEntities, Sort)
+		table.sort(ClosestEntities, Settings.Sort or function(a, b)
+			return a.Magnitude < b.Magnitude
+		end)
 
 		for _, Tab in ClosestEntities do
-			if Settings.WallCheck and EntityLib:WallCheck(RootPosition, Tab.Entity[Part].Position) then continue end
+			if Settings.WallCheck and EntityLib:WallCheck(RootPosition, Tab.Entity[Part].Position, Settings.IgnoreList) then continue end
 			return Tab.Entity
 		end
 	end
@@ -316,9 +280,6 @@ function EntityLib:GetClosestEntities(Settings)
         local Part = Settings.Part or 'Root'
         local Range = Settings.Range or math.huge
         local Limit = Settings.Limit or math.huge
-        local Sort = Settings.Sort or function(a, b)
-			return a.Magnitude < b.Magnitude
-		end
 
 		for _, Entity in EntityLib.List do
 			if Entity.Player and not Settings.Players then continue end
@@ -335,12 +296,14 @@ function EntityLib:GetClosestEntities(Settings)
 			end
 		end
 
-		table.sort(ClosestEntities, Sort)
+		table.sort(ClosestEntities, Settings.Sort or function(a, b)
+            return a.Magnitude < b.Magnitude
+        end)
 
         local Returned = 0
 
 		for _, Tab in ClosestEntities do
-			if Settings.WallCheck and EntityLib:WallCheck(Origin, Tab.Entity[Part].Position) then continue end
+			if Settings.WallCheck and EntityLib:WallCheck(Origin, Tab.Entity[Part].Position, Settings.IgnoreList) then continue end
             table.insert(Characters, Tab.Entity)
             Returned += 1
 			if Returned >= Limit then break end
@@ -350,110 +313,152 @@ function EntityLib:GetClosestEntities(Settings)
 	return Characters
 end
 
-local LocalCharacterPropertyBlacklist = {
+local AddBlacklist = {
     NPC = true,
     Player = true,
     Connections = true,
 }
 
+function EntityLib:GetEntityComponents()
+    return {}
+end
+
 function EntityLib:AddEntity(Char, Player)
     if not Char then return end
     EntityLib.CharacterThreads[Char] = task.spawn(function()
-        local Humanoid = EntityLib:WaitForChild(Char, 'Humanoid', 10)
-        local Root = Humanoid and EntityLib:WaitForChild(Humanoid, 'RootPart', workspace.StreamingEnabled and 9e9 or 10, true)
-        local Head = Char:WaitForChild('Head', 10) or Root
+        const Humanoid: Humanoid? = ObjectFunctions:WaitForChildOfClass(Char, 'Humanoid', 10) or nil
+        const Animator: Animator? = Humanoid and ObjectFunctions:WaitForChildOfClass(Humanoid, 'Animator', 1) or nil
+        const Root: BasePart? = Humanoid and EntityLib:WaitForRootPart(Humanoid, workspace.StreamingEnabled and math.huge or 10) or nil
+        const Head: BasePart? = Char:WaitForChild('Head', 10) or Root
 
         if Root and Humanoid then
-            local Entity = {
+            const Entity = {
                 Player = Player,
                 NPC = Player == nil,
                 Character = Char,
                 Humanoid = Humanoid,
-                Animator = Humanoid:FindFirstChildOfClass('Animator') or Humanoid,
+                Animator = Animator,
                 Root = Root,
                 Head = Head,
                 HipHeight = Humanoid.HipHeight + (Root.Size.Y / 2) + (Humanoid.RigType == Enum.HumanoidRigType.R6 and 2 or 0),
                 RigType = Humanoid.RigType,
                 Connections = {}
             }
-            
+
             if Humanoid.RigType == Enum.HumanoidRigType.R15 then
-                Entity.UpperTorso = Char:FindFirstChild('UpperTorso')
-                Entity.LowerTorso = Char:FindFirstChild('LowerTorso')
+                Entity.UpperTorso = Char:WaitForChild('UpperTorso', 5)
+                Entity.LowerTorso = Char:WaitForChild('LowerTorso', 5)
+                Entity.Torso = Entity.UpperTorso or Entity.LowerTorso
             else
-                Entity.Torso = Char:FindFirstChild('Torso')
-            end
-            
-            for i, v in EntityLib:GetCharacterProperties(Entity) do
-                Entity[i] = v
+                Entity.Torso = Char:WaitForChild('Torso', 5)
             end
 
-            local ConnectionsTable = Player == Plr and EntityLib.LocalConnections or Entity.Connections
-
-            for _, v in EntityLib:GetUpdateConnections(Entity) do
-                table.insert(ConnectionsTable, v:Connect(function()
-                    for Property, Value in EntityLib:GetCharacterProperties(Entity) do
-                        Entity[Property] = Value
-                        if LocalCharacterPropertyBlacklist[Property] then return end
-                        EntityLib[Property] = Value
-                    end
-                end))
-            end
-            for _, v in EntityLib:GetTeamUpdateConnections(Entity) do
-                table.insert(ConnectionsTable, v:Connect(function()
-                    if Player == Plr then
-                        EntityLib:Refresh()
-                    else
-                        EntityLib:RefreshEntity(Entity.Character, Player)
-                    end
-                end))
-            end
-
-            if Player == Plr then
-                for i, v in Entity do
-                    if LocalCharacterPropertyBlacklist[i] then continue end
-                    EntityLib[i] = v
+            const Components = EntityLib:GetEntityComponents(Entity)
+            if Components then
+                for i, v in Components do
+                    Entity[i] = v
                 end
-                EntityLib.Alive = true
-                EntityLib.Events.LocalAdded:Fire(Entity)
-            else
-                Entity.Teammate = EntityLib:IsTeammate(Entity)
-                table.insert(EntityLib.List, Entity)
-                EntityLib.Events.EntityAdded:Fire(Entity)
+                
+                for i, v in EntityLib:GetEntityProperties(Entity) do
+                    Entity[i] = v
+                end
+                
+                local ConnectionsTable = Player == Plr and EntityLib.LocalConnections or Entity.Connections
+                
+                for _, v in EntityLib:GetUpdateConnections(Entity) do
+                    table.insert(ConnectionsTable, v:Connect(function()
+                        for Property, Value in EntityLib:GetEntityProperties(Entity) do
+                            Entity[Property] = Value
+                            if Player == Plr then
+                                EntityLib[Property] = Value
+                                EntityLib.Events.LocalUpdated:Fire(Entity)
+                            else
+                                EntityLib.Events.EntityUpdated:Fire(Entity)
+                            end
+                        end
+                    end))
+                end
+
+                for _, v in EntityLib:GetTeamUpdateConnections(Entity) do
+                    table.insert(ConnectionsTable, v:Connect(function()
+                        if Player == Plr then
+                            EntityLib:Refresh()
+                        else
+                            EntityLib:RefreshEntity(Entity.Character, Player)
+                        end
+                    end))
+                end
+
+                if Player == Plr then
+                    for i, v in Entity do
+                        if AddBlacklist[i] then continue end
+                        EntityLib[i] = v
+                    end
+                    EntityLib.Alive = true
+                    EntityLib.Events.LocalAdded:Fire(Entity)
+                else
+                    Entity.Teammate = EntityLib:IsTeammate(Entity)
+                    table.insert(EntityLib.List, Entity)
+                    EntityLib.Events.EntityAdded:Fire(Entity)
+                end
             end
+
+			if not Entity.Animator then
+				Entity.Animator = ObjectFunctions:WaitForChildOfClass(Humanoid, 'Animator', 9)
+				if Player == Plr then
+					EntityLib.Animator = Entity.Animator
+				end
+			end
         end
+
         EntityLib.CharacterThreads[Char] = nil
     end)
 end
 
-local LocalItems = {'Character', 'Humanoid', 'Animator', 'Root', 'Head', 'Torso', 'UpperTorso', 'LowerTorso', 'HipHeight', 'RigType'}
+local ItemWhitelist = {
+	Alive = true,
+	Events = true,
+	CharacterThreads = true,
+	Running = true,
+	List = true,
+	Connections = true,
+	PlayerConnections = true,
+	LocalConnections = true
+}
 
 function EntityLib:RemoveEntity(Char, Player)
     if not Char then return end
-    local Character, Index = EntityLib:FindEntity(Char)
 
     if Player == Plr then
-        for _, v in LocalItems do
-            EntityLib[v] = nil
+        if not EntityLib.Alive then return end
+
+        for i, v in EntityLib do
+            if typeof(v) ~= 'function' and not ItemWhitelist[i] then
+                EntityLib[i] = nil
+            end
         end
-        for Property in EntityLib:GetCharacterProperties() do
-            EntityLib[Property] = nil
-        end
+
         for _, v in EntityLib.LocalConnections do
             v:Disconnect()
         end
         table.clear(EntityLib.LocalConnections)
+
         EntityLib.Alive = false
         EntityLib.Events.LocalRemoved:Fire(EntityLib)
-    elseif Character then
+    else
         local Thread = EntityLib.CharacterThreads[Char]
         if Thread then
             task.cancel(Thread)
             EntityLib.CharacterThreads[Char] = nil
         end
-        LoopClean(Character.Connections)
-        table.remove(EntityLib.List, Index)
-        EntityLib.Events.EntityRemoved:Fire(Character)
+
+        local Entity, Index = EntityLib:FindEntity(Char)
+        if Entity then
+            LoopClean(Entity.Connections)
+            table.remove(EntityLib.List, Index)
+
+            EntityLib.Events.EntityRemoved:Fire(Entity)
+        end
     end
 end
 
@@ -510,8 +515,8 @@ function EntityLib:Start()
         EntityLib:RemovePlayer(Player)
     end))
 
-    table.insert(EntityLib.Connections, workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
-        Camera = workspace.CurrentCamera or workspace:FindFirstChildOfClass("Camera")
+    table.insert(EntityLib.Connections, workspace:GetPropertyChangedSignal('CurrentCamera'):Connect(function()
+        Camera = workspace.CurrentCamera or workspace:FindFirstChildOfClass('Camera')
     end))
 
     for _, Player in Players:GetPlayers() do
@@ -526,6 +531,7 @@ function EntityLib:Stop()
         v:Disconnect()
     end
     table.clear(EntityLib.Connections)
+
     for _, v in EntityLib.PlayerConnections do
         for _, v2 in v do
             v2:Disconnect()
@@ -533,12 +539,14 @@ function EntityLib:Stop()
         table.clear(v)
     end
     table.clear(EntityLib.PlayerConnections)
+
     for _, Player in Players:GetPlayers() do
         EntityLib:RemovePlayer(Player)
     end
     for _, Entity in EntityLib.List do
         EntityLib:RemoveEntity(Entity)
     end
+
     EntityLib.Running = false
 end
 
@@ -546,18 +554,19 @@ function EntityLib:Shutdown()
     if EntityLib.Running then
         EntityLib:Stop()
     end
+
     for _, v in EntityLib.Events do
         v:DisconnectAll()
     end
     table.clear(EntityLib.Events)
+
     EntityLib.Events = nil
     LoopClean(EntityLib)
     EntityLib = nil
 end
 
 function EntityLib:Refresh()
-    local List = table.clone(EntityLib.List)
-    for _, Entity in List do
+    for _, Entity in table.clone(EntityLib.List) do
         EntityLib:RefreshEntity(Entity.Character, Entity.Player)
     end
 end

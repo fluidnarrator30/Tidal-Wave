@@ -1,17 +1,28 @@
-local Drawing = {}
+const Drawing = {}
 
-local function UpdateLinePosition(Line, From, To)
-    local Delta = To - From
-    local Offset = (From + To) * 0.5
-    Line.Position = UDim2.fromOffset(Offset.X, Offset.Y)
-    Line.Size = UDim2.fromOffset(Delta.Magnitude, Line.Size.Y.Offset)
-    Line.Rotation = math.deg(math.atan2(Delta.Y, Delta.X))
-end
+const TidalWave = shared.TidalWave
 
-local DrawingTypes = {
+const DrawingGui = Instance.new('ScreenGui')
+DrawingGui.Name = 'Drawing'
+DrawingGui.DisplayOrder = 0
+DrawingGui.IgnoreGuiInset = true
+DrawingGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+DrawingGui.Parent = TidalWave.Gui
+
+const Color3 = table.clone(Color3)
+Color3.White = Color3.new(1, 1, 1)
+Color3.Black = Color3.new()
+Color3.Red = Color3.new(1, 0, 0)
+Color3.Green = Color3.new(0, 1, 0)
+Color3.Blue = Color3.new(0, 0, 1)
+Color3.Yellow = Color3.new(1, 1, 0)
+Color3.Cyan = Color3.new(0, 1, 1)
+Color3.Pink = Color3.new(1, 0, 1)
+
+const DrawingTypes = {
     Base = {
         Visible = true,
-        ZIndex = 1,
+        ZIndex = 1
     },
     Circle = {
         Properties = {
@@ -19,26 +30,28 @@ local DrawingTypes = {
             Thickness = 1,
             OutlineTransparency = 0,
             FillTransparency = 1,
-            OutlineColor = Color3.fromRGB(255, 255, 255),
-            FillColor = Color3.fromRGB(255, 255, 255),
+            OutlineColor = Color3.White,
+            FillColor = Color3.White,
+            Center = true,
             Position = Vector2.zero
         },
-        Create = function(self, Properties, Parent)
-            local Circle = Instance.new("Frame")
-            Circle.Name = "Circle"
+        Create = function(self, Properties)
+            const Circle = Instance.new('Frame')
+            Circle.Name = 'Circle'
             Circle.Size = UDim2.fromOffset(Properties.Radius * 2, Properties.Radius * 2)
             Circle.BackgroundTransparency = Properties.FillTransparency
             Circle.BackgroundColor3 = Properties.FillColor
             Circle.AnchorPoint = Vector2.new(0.5, 0.5)
             Circle.Visible = Properties.Visible
             Circle.ZIndex = Properties.ZIndex
-            Circle.Parent = Parent
+            Circle.Active = false
+            Circle.Parent = DrawingGui
 
-            local UICorner = Instance.new("UICorner")
-            UICorner.CornerRadius = UDim.new(1, 0)
-            UICorner.Parent = Circle
+            const Corner = Instance.new('UICorner')
+            Corner.CornerRadius = UDim.new(1, 0)
+            Corner.Parent = Circle
 
-            local Outline = Instance.new("UIStroke")
+            const Outline = Instance.new('UIStroke')
             Outline.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
             Outline.BorderStrokePosition = Enum.BorderStrokePosition.Inner
             Outline.Transparency = Properties.OutlineTransparency
@@ -46,9 +59,11 @@ local DrawingTypes = {
             Outline.Thickness = Properties.Thickness
             Outline.Parent = Circle
 
-            rawset(self, "Object", Circle)
-            rawset(self, "Object2", Outline)
-            rawset(self, "Object3", UICorner)
+            self.Object = Circle
+            self.Outline = Outline
+            self.Corner = Corner
+
+            return Circle
         end,
         UpdateFunctions = {
             Radius = function(self)
@@ -61,25 +76,27 @@ local DrawingTypes = {
                 self.Object.BackgroundColor3 = self.FillColor
             end,
             OutlineTransparency = function(self)
-                self.Object2.Transparency = self.OutlineTransparency
+                self.Outline.Transparency = self.OutlineTransparency
             end,
             OutlineColor = function(self)
-                self.Object2.Color = self.OutlineColor
+                self.Outline.Color = self.OutlineColor
             end,
             Thickness = function(self)
-                self.Object2.Thickness = self.Thickness
+                self.Outline.Thickness = self.Thickness
             end,
             Position = function(self)
                 self.Object.Position = UDim2.fromOffset(self.Position.X, self.Position.Y)
             end,
             Visible = function(self)
                 self.Object.Visible = self.Visible
-                self.Object2.Enabled = self.Visible
+                self.Outline.Enabled = self.Visible
             end,
-            Parent = function(self)
-                self.Object.Parent = self.Parent
-                self.Object2.Parent = self.Object
-                self.Object3.Parent = self.Object
+            Center = function(self)
+                self.Object.AnchorPoint = self.Center and Vector2.new(0.5, 0.5) or Vector2.zero
+            end,
+            ZIndex = function(self)
+                self.Object.ZIndex = self.ZIndex
+                self.Corner.ZIndex = self.ZIndex
             end
         },
     },
@@ -88,72 +105,42 @@ local DrawingTypes = {
             From = Vector2.zero,
             To = Vector2.zero,
             Thickness = 1,
-            Transparency = 0,
-            Color = Color3.fromRGB(255, 255, 255)
+            Color = Color3.White
         },
         Create = function(self, Properties, Parent)
-            local Line = Instance.new("Frame")
-            Line.Name = "Line"
-            Line.BorderSizePixel = 0
-            Line.Size = UDim2.fromOffset(0, Properties.Thickness)
-            Line.AnchorPoint = Vector2.new(0.5, 0.5)
-            Line.Visible = Properties.Visible
-            Line.ZIndex = Properties.ZIndex
-            Line.BackgroundColor3 = Properties.Color
-            Line.BackgroundTransparency = Properties.Transparency
-            Line.Parent = Parent
+			const Canvas = Instance.new('CanvasGroup') -- me when Path2D doesn't have Transparency
+			Canvas.Name = 'LineCanvas'
+			Canvas.BackgroundTransparency = 1
+			Canvas.Active = false
+			Canvas.Interactable = false
+			Canvas.Size = UDim2.fromScale(1, 1)
+			Canvas.Visible = Properties.Visible
+			Canvas.Parent = DrawingGui
 
-            rawset(self, "Object", Line)
+            const Line = Instance.new('Path2D')
+            Line.Name = 'Line'
+            Line.ZIndex = Properties.ZIndex
+            Line.Color3 = Properties.Color
+            Line.Parent = Canvas
+
+            self.Object = Line
+			self.Canvas = Canvas
+
+            self.ControlPoints = {
+                [1] = Path2DControlPoint.new(),
+                [2] = Path2DControlPoint.new()
+            }
+
+            return Canvas
         end,
         UpdateFunctions = {
             From = function(self)
-                UpdateLinePosition(self.Object, self.From, self.To)
+                self.ControlPoints[1].Position = UDim2.fromOffset(self.From.X, self.From.Y)
+                self.Object:SetControlPoints(self.ControlPoints)
             end,
             To = function(self)
-                UpdateLinePosition(self.Object, self.From, self.To)
-            end,
-            Thickness = function(self)
-                self.Object.Size = UDim2.fromOffset(self.Object.Size.X.Offset, self.Thickness)
-            end,
-            Transparency = function(self)
-                self.Object.BackgroundTransparency = self.Transparency
-            end,
-            Color = function(self)
-                self.Object.BackgroundColor3 = self.Color
-            end,
-            Visible = function(self)
-                self.Object.Visible = self.Visible
-            end,
-            Parent = function(self)
-                self.Object.Parent = self.Parent
-            end
-        },
-    },
-    PathLine = {
-        Properties = {
-            Positions = {},
-            Thickness = 1,
-            Color = Color3.fromRGB(255, 255, 255),
-        },
-        Create = function(self, Properties, Parent)
-            local Path = Instance.new("Path2D")
-            Path.Name = "PathLine"
-            Path.Visible = Properties.Visible
-            Path.ZIndex = Properties.ZIndex
-            Path.Color3 = Properties.Color
-            Path.Parent = Parent
-
-            rawset(self, "Object", Path)
-        end,
-        UpdateFunctions = {
-            Positions = function(self)
-                local ControlPoints = {}
-                for i, v in self.Positions do
-                    if typeof(v) == "Vector2" then
-                        table.insert(ControlPoints, Path2DControlPoint.new(UDim2.fromOffset(v.X, v.Y)))
-                    end
-                end
-                self.Object:SetControlPoints(ControlPoints)
+                self.ControlPoints[2].Position = UDim2.fromOffset(self.To.X, self.To.Y)
+                self.Object:SetControlPoints(self.ControlPoints)
             end,
             Thickness = function(self)
                 self.Object.Thickness = self.Thickness
@@ -161,33 +148,111 @@ local DrawingTypes = {
             Color = function(self)
                 self.Object.Color3 = self.Color
             end,
+			Transparency = function(self)
+				self.Canvas.GroupTransparency = self.Transparency
+			end,
             Visible = function(self)
                 self.Object.Visible = self.Visible
             end,
-            Parent = function(self)
-                self.Object.Parent = self.Parent
+            ZIndex = function(self)
+                self.Object.ZIndex = self.ZIndex
+            end
+        },
+    },
+    Square = {
+        Properties = {
+            Size = Vector2.zero,
+            Position = Vector2.zero,
+            Center = true,
+            Thickness = 1,
+            OutlineTransparency = 0,
+            FillTransparency = 1,
+            OutlineColor = Color3.White,
+            FillColor = Color3.White
+        },
+        Create = function(self, Properties, Parent)
+            const Square = Instance.new('Frame')
+            Square.Name = 'Square'
+            Square.AnchorPoint = Vector2.new(0.5, 0.5)
+            Square.BackgroundTransparency = 1
+            Square.BackgroundColor3 = Properties.FillColor
+            Square.ZIndex = Properties.ZIndex
+            Square.Active = false
+            Square.Parent = DrawingGui
+            
+            const Outline = Instance.new("UIStroke")
+            Outline.Thickness = Properties.Thickness.Value
+            Outline.Color = Properties.OutlineColor
+            Outline.LineJoinMode = Enum.LineJoinMode.Miter
+            Outline.BorderStrokePosition = Enum.BorderStrokePosition.Inner
+            Outline.Parent = Square
+
+            self.Object = Square
+            self.Outline = Outline
+
+            return Outline
+        end,
+        UpdateFunctions = {
+            Size = function(self)
+                self.Object.Size = UDim2.fromOffset(self.Size.X, self.Size.Y)
+            end,
+            Position = function(self)
+                self.Object.Position = UDim2.fromOffset(self.Position.X, self.Position.Y)
+            end,
+            Center = function(self)
+                self.Object.AnchorPoint = self.Center and Vector2.new(0.5, 0.5) or Vector2.zero
+            end,
+            Thickness = function(self)
+                self.Outline.Thickness = self.Thickness
+            end,
+            OutlineTransparency = function(self)
+                self.Outline.Transparency = self.OutlineTransparency
+            end,
+            FillTransparency = function(self)
+                self.Object.BackgroundTransparency = self.FillTransparency
+            end,
+            OutlineColor = function(self)
+                self.Outline.Color = self.OutlineColor
+            end,
+            FillColor = function(self)
+                self.Object.BackgroundColor3 = self.FillColor
+            end,
+            Visible = function(self)
+                self.Object.Visible = self.Visible
+            end,
+            ZIndex = function(self)
+                self.Object.ZIndex = self.ZIndex
+                self.Outline.ZIndex = self.ZIndex
             end
         }
     }
 }
 
-function Drawing.new(DrawingType: "Circle" | "Line", Parent: GuiObject?)
-    local NewDrawing = DrawingType ~= "Base" and DrawingTypes[DrawingType] or nil
-    assert(NewDrawing ~= nil, "Invalid Drawing type.")
+function Drawing.new(DrawingType)
+    const NewDrawing = DrawingType ~= 'Base' and DrawingTypes[DrawingType] or nil
+    assert(NewDrawing, 'Invalid Drawing type')
 
-    local StoredProperties = table.clone(DrawingTypes.Base)
-    for i, v in NewDrawing.Properties do
-        StoredProperties[i] = v
+    const StoredProperties = table.clone(DrawingTypes.Base)
+    for Property, Value in NewDrawing.Properties do
+        StoredProperties[Property] = Value
     end
 
-    local self = {}
-    NewDrawing.Create(self, StoredProperties, Parent)
+    const self = {}
+    local Obj = NewDrawing.Create(self, StoredProperties)
 
-    local Metatable = {
+    function self:Destroy()
+        Obj:Destroy()
+		Obj = nil
+    end
+
+	self.Remove = self.Destroy
+
+    return setmetatable(self, {
         __index = function(_, i)
-            if StoredProperties[i] then
+            if StoredProperties[i] ~= nil then
                 return StoredProperties[i]
             end
+            
             return Drawing[i]
         end,
         __newindex = function(_, i, v)
@@ -195,21 +260,8 @@ function Drawing.new(DrawingType: "Circle" | "Line", Parent: GuiObject?)
                 StoredProperties[i] = v
                 NewDrawing.UpdateFunctions[i](self)
             end
-        end
-    }
-
-    setmetatable(self, Metatable)
-
-    return self
-end
-
-function Drawing:Destroy()
-    for i, v in {"Object", "Object2", "Object3"} do
-        if rawget(self, v) then
-            self[v]:Destroy()
-            rawset(self, v, nil)
-        end
-    end
+        end,
+    })
 end
 
 return Drawing
