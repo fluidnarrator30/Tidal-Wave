@@ -1181,7 +1181,7 @@ Run(function() -- Combat
 	Run(function() -- SilentAim
 		local SilentAim, UsePlayers, UseNPCs, WallCheck, Mode, Method, RayMethod, IgnoredScripts, Range, HitChance, HeadshotChance
 		local AutoFire, AutoFireShootDelay, AutoFireMode, Wallbang, FunctionHook, OthHook
-		local OutlineColor, FillColor, Thickness
+		local Circle, OutlineColor, FillColor, Thickness
 		local Projectile, ProjectileSpeed, ProjectileGravity
 
 		const RaycastWhitelist, ProjectileRaycast = RaycastParams.new(), RaycastParams.new()
@@ -1403,10 +1403,14 @@ Run(function() -- Combat
 						OldNamecall = OthHook.Enabled and oth.hook(getrawmetatable(game).__namecall, NamecallHook) or hookmetamethod(game, '__namecall', NamecallHook)
 					end
 
-					CreateCircle()
+					if Circle.Enabled then
+						CreateCircle()
+					end
 
 					SilentAim:Clean(RunService.PreRender:Connect(function()
-						CircleObject.Position = GetMouseLocation()
+						if CircleObject then
+							CircleObject.Position = GetMouseLocation()
+						end
 
 						if AutoFire.Enabled and mouse1press and mouse1release then
 							const Origin = AutoFireMode.Value == 'Camera' and Camera.CFrame or EntityLib.Alive and EntityLib.Root.CFrame or CFrame.identity
@@ -1577,7 +1581,7 @@ Run(function() -- Combat
 			Restart = true
 		})
 
-		const Circle = Mode:BindToggleTo('Mouse', {
+		Circle = Mode:BindToggleTo('Mouse', {
 			Name = 'Range Circle',
 			Function = function(Enabled)
 				if Enabled and SilentAim.Enabled then
@@ -5670,27 +5674,33 @@ Run(function() -- Visuals
 	end)
 
 	Run(function() -- Chams
-		local Chams, Priority, UseTeamColor, UseLimits, MinDistance, MaxDistance
+		local Chams, Mode, Priority, UseTeamColor, UseLimits, MinDistance, MaxDistance
 		local ShowPlayers, OutlineColor, FillColor
 		local ShowNPCs, NPC_OutlineColor, NPC_FillColor
 		
 		local Folder
-		local Highlights = {}
+		local Objects = {}
+		local Threads = {}
 		local Entities = 0
+		local ViewportFrame, WorldModel
 		
 		const function EntityRemoved(Entity)
-			const Tab = Highlights[Entity.Character]
+			if Threads[Entity.Character] then
+				task.cancel(Threads[Entity.Character])
+				Threads[Entity.Character] = nil
+			end
+
+			const Tab = Objects[Entity.Character]
 			if Tab then
 				Entities -= 1
 				Chams:UpdateTextGUI()
-				Tab.Highlight:Destroy()
-				Highlights[Entity.Character] = nil
+				const Object = Tab.Highlight or Tab.Entity.Character
+				Object:Destroy()
+				Objects[Entity.Character] = nil
 			end
 		end
 		
 		const function EntityAdded(Entity)
-			EntityRemoved(Entity)
-		
 			if not ShowPlayers.Enabled and Entity.Player then return end
 			if not ShowNPCs.Enabled and Entity.NPC then return end
 			if Priority.Value ~= 'All' then
@@ -5705,39 +5715,76 @@ Run(function() -- Visuals
 			const EntityColor = UseTeamColor.Enabled and EntityLib:GetEntityColor(Entity) or nil
 			const Player = Entity.Player
 			const Name = Player and Player.Name or Entity.Character.Name
-		
-			const Highlight = Instance.new('Highlight')
-			Highlight.Name = Name .. '_Chams'
-			Highlight.OutlineColor = EntityColor or (Player and OutlineColor.Color or NPC_OutlineColor.Color)
-			Highlight.FillColor = EntityColor or (Player and FillColor.Color or NPC_FillColor.Color)
-			Highlight.OutlineTransparency = (Player and OutlineColor.Transparency or NPC_OutlineColor.Transparency)
-			Highlight.FillTransparency = (Player and FillColor.Transparency or NPC_FillColor.Transparency)
-			Highlight.Adornee = Entity.Character
 
-			if UseLimits.Enabled and EntityLib.Alive then
-				const Distance = vector.magnitude(Entity.Root.Position - EntityLib.Root.Position)
-				Highlight.Enabled = Distance >= MinDistance.Value and Distance <= MaxDistance.Value 
-			end
-
-			Highlight.Parent = Folder
-		
-			Highlights[Entity.Character] = {
-				Highlight = Highlight,
-				Entity = Entity
-			}
-		end
-		
-		const function UpdateHighlights()
-			for _, Tab in Highlights do
-				const Entity = Tab.Entity
-				const Highlight = Tab.Highlight
-				const Player = Entity.Player
-				const EntityColor = UseTeamColor.Enabled and EntityLib:GetEntityColor(Entity) or nil
-		
+			if Mode.Value == 'Highlight' then
+				const Highlight = Instance.new('Highlight')
+				Highlight.Name = Name .. '_Chams'
 				Highlight.OutlineColor = EntityColor or (Player and OutlineColor.Color or NPC_OutlineColor.Color)
 				Highlight.FillColor = EntityColor or (Player and FillColor.Color or NPC_FillColor.Color)
 				Highlight.OutlineTransparency = (Player and OutlineColor.Transparency or NPC_OutlineColor.Transparency)
 				Highlight.FillTransparency = (Player and FillColor.Transparency or NPC_FillColor.Transparency)
+				Highlight.Adornee = Entity.Character
+
+				if UseLimits.Enabled and EntityLib.Alive then
+					const Distance = vector.magnitude(Entity.Root.Position - EntityLib.Root.Position)
+					Highlight.Enabled = Distance >= MinDistance.Value and Distance <= MaxDistance.Value 
+				end
+
+				Highlight.Parent = Folder
+			
+				Objects[Entity.Character] = {
+					Highlight = Highlight,
+					Entity = Entity
+				}
+			else
+				Threads[Entity.Character] = task.spawn(function()
+					const OriginalAnimator = Entity.Animator or ObjectFunctions:WaitForChildOfClass(Entity.Character, 'Animator', 10)
+					Entity.Character.Archivable = true
+					const Clone = Entity.Character:Clone()
+					Entity.Character.Archivable = false
+					for _, Obj in Clone:QueryDescendants('LocalScript, Tool') do
+						Obj:Destroy()
+					end
+					Clone.Parent = WorldModel
+
+					const Humanoid = Clone:FindFirstChildOfClass('Humanoid')
+					const Animator = Humanoid and Humanoid:FindFirstChildOfClass('Animator')
+					if OriginalAnimator and Animator then
+						Animator:SynchronizeWith(OriginalAnimator)
+					end
+
+					Objects[Entity.Character] = {
+						Entity = Entity,
+						Clone = Clone,
+						Root = Humanoid.RootPart
+					}
+
+					Threads[Entity.Character] = nil
+				end)
+			end
+		end
+		
+		const function UpdateHighlights()
+			if Mode.Value == 'Highlight' then
+				for _, Tab in Objects do
+					const Entity = Tab.Entity
+					const Highlight = Tab.Highlight
+					const Player = Entity.Player
+					const EntityColor = UseTeamColor.Enabled and EntityLib:GetEntityColor(Entity) or nil
+			
+					Highlight.OutlineColor = EntityColor or (Player and OutlineColor.Color or NPC_OutlineColor.Color)
+					Highlight.FillColor = EntityColor or (Player and FillColor.Color or NPC_FillColor.Color)
+					Highlight.OutlineTransparency = (Player and OutlineColor.Transparency or NPC_OutlineColor.Transparency)
+					Highlight.FillTransparency = (Player and FillColor.Transparency or NPC_FillColor.Transparency)
+				end
+			end
+		end
+
+		const function ToggleHighlight(Object, Value)
+			if Object.Highlight then
+				Object.Highlight.Enabled = Value
+			else
+				Object.Clone.Parent = Value and WorldModel or nil
 			end
 		end
 		
@@ -5746,9 +5793,37 @@ Run(function() -- Visuals
 			Info = 'Renders Players/NPCs through walls',
 			Function = function(Enabled)
 				if Enabled then
-					Folder = Instance.new('Folder')
-					Folder.Name = 'Chams'
-					Folder.Parent = TidalWave.Gui
+					if Mode.Value == 'Highlight' then
+						Folder = Instance.new('Folder')
+						Folder.Name = 'Chams'
+						Folder.Parent = TidalWave.Gui
+					else
+						ViewportFrame = Instance.new('ViewportFrame')
+						ViewportFrame.Name = 'Chams_Viewport'
+						ViewportFrame.Size = UDim2.fromScale(1, 1)
+						ViewportFrame.BackgroundTransparency = 1
+						ViewportFrame.CurrentCamera = Camera
+						ViewportFrame.Ambient = Color3.White
+						ViewportFrame.LightColor = Color3.White
+						ViewportFrame.ImageColor3 = Color3.White
+						ViewportFrame.ImageTransparency = 0
+						ViewportFrame.LightDirection = vector.zero
+						ViewportFrame.ZIndex = -1
+						ViewportFrame.Parent = TidalWave.Gui
+			
+						WorldModel = Instance.new('WorldModel')
+						WorldModel.Name = 'ChamsWorldModel'
+						WorldModel.Parent = ViewportFrame
+
+						Chams:Clean(RunService.PreRender:Connect(function()
+							for _, Object in Objects do
+								const Entity = Object.Entity
+								if Object.Clone.Parent ~= nil then
+									Object.Root.CFrame = Entity.Root.CFrame
+								end
+							end
+						end))
+					end
 					
 					Chams:Clean(EntityLib.Events.EntityAdded:Connect(EntityAdded))
 					Chams:Clean(EntityLib.Events.EntityRemoved:Connect(EntityRemoved))
@@ -5757,34 +5832,46 @@ Run(function() -- Visuals
 					end
 
 					if UseLimits.Enabled then
-						while task.wait(0.05) do
-							if not EntityLib.Alive then continue end
-	
-							const LocalPosition = EntityLib.Root.Position
-	
-							for _, Tab in Highlights do
-								const Entity = Tab.Entity
-								const Highlight  = Tab.Highlight
-								const Distance = vector.magnitude(Entity.Position - LocalPosition)
-	
-								if Distance >= MinDistance.Value and Distance <= MaxDistance.Value then
-									Highlight.Enabled = true
-								else
-									Highlight.Enabled = false
+						Chams:Clean(task.spawn(function()
+							while task.wait(0.05) do
+								if not EntityLib.Alive then continue end
+		
+								const LocalPosition = EntityLib.Root.Position
+								for _, Tab in Objects do
+									const Distance = vector.magnitude(Tab.Entity.Root.Position - LocalPosition)
+									const WithinRange = Distance >= MinDistance.Value and Distance <= MaxDistance.Value
+									ToggleHighlight(Tab, WithinRange)
 								end
 							end
-						end
+						end))
 					end
 				else
-					Folder:Destroy()
-					Folder = nil
+					if Folder then
+						Folder:Destroy()
+						Folder = nil
+					end
+					if WorldModel then
+						WorldModel:Destroy()
+						WorldModel = nil
+					end
+					if ViewportFrame then
+						ViewportFrame:Destroy()
+						ViewportFrame = nil
+					end
 					Entities = 0
-					table.clear(Highlights)
+					table.clear(Objects)
 				end
 			end,
 			ExtraText = function()
 				return tostring(Entities)
-			end
+			end,
+		})
+
+		Mode = Chams:CreateDropdown({
+			Name = 'Mode',
+			List = {'Highlight', 'ViewportFrame'},
+			Tooltip = 'Highlight - Uses Roblox\'s highlights to render characters through walls.\nViewportFrame - Uses ViewportFrames to render characters through walls.',
+			Restart = true
 		})
 		
 		Priority = Chams:CreateDropdown({
@@ -7478,336 +7565,6 @@ Run(function() -- Visuals
 		UpdateRotation()
 	end)
 
-	Run(function() -- ViewportChams
-		local ViewportChams, Priority
-		
-		local ShowPlayers, Color
-		local ShowNPCs, NPC_Color
-		local GlobalColor
-		
-		local ViewportFrame, ViewportModel
-		local Entities = {}
-		
-		const AllowedClasses = {
-			Part = true,
-			MeshPart = true,
-			Mesh = true,
-			SpecialMesh = true,
-			Attachment = true,
-			Decal = true,
-			Texture = true,
-			Shirt = true,
-			Pants = true,
-			ShirtGraphic = true,
-			BodyColors = true,
-			Accessory = true,
-			WrapLayer = true,
-			WrapTarget = true,
-			SurfaceAppearance = true,
-			Humanoid = true,
-			Animator = true,
-			AnimationController = true
-		}
-		
-		const function EntityRemoved(Entity)
-			const Character = Entity.Character
-		
-			for i, Tab in Entities do
-				if Tab.Entity.Character == Character then
-					Tab.Model:Destroy()
-					table.remove(Entities, i)
-		
-					ViewportChams:UpdateTextGUI()
-					break
-				end
-			end
-		end
-		
-		const function EntityAdded(Entity)
-			if Entity.Player and not ShowPlayers.Enabled then return end
-			if Entity.NPC and not ShowNPCs.Enabled then return end
-			if Priority.Value ~= 'All' then
-				if (Priority.Value == 'Enemies' and Entity.Teammate) or (Priority.Value == 'Teammates' and not Entity.Teammate) or (Priority.Value == 'Friends' and not IsFriend(Entity.Player)) then
-					return
-				end
-			end
-		
-			ViewportChams:UpdateTextGUI()
-		
-			local Tab = {
-				Entity = Entity,
-				Parts = {},
-				Tracks = {}
-			}
-		
-			local OtherObjects = {}
-			local PendingJoints = {}
-			local ClonedAnimator
-		
-			const function Recursive(Obj, Parent)
-				for _, Child in Obj:GetChildren() do
-					if Child:IsA('JointInstance') then
-						PendingJoints[Child] = true
-						continue
-					end
-					if not AllowedClasses[Child.ClassName] then continue end
-		
-					local Clone = Instance.fromExisting(Child)
-					if Clone:IsA('BasePart') then
-						Clone.Color = Entity.Player and Color.Color or NPC_Color.Color
-						Clone.LocalTransparencyModifier = Entity.Player and Color.Transparency or NPC_Color.Transparency
-						Tab.Parts[Child] = Clone
-					else
-						OtherObjects[Child] = Clone
-					end
-		
-					if Child:IsA('Animator') then
-						ClonedAnimator = Clone
-					elseif Child == Entity.Root then
-						Clone.Anchored = true
-						Tab.Root = Clone
-					end
-					
-					Clone.Parent = Parent
-					Recursive(Child, Clone)
-				end
-			end
-		
-			local Model = Instance.new('Model')
-			Model.Name = (Entity.Player and Entity.Player.Name or Entity.Character.Name) .. '_Chams'
-			Model.Parent = ViewportModel
-		
-			Tab.Model = Model
-		
-			Recursive(Entity.Character, Model)
-		
-			const function TrySetupJoint(Joint)
-				local Part0 = Tab.Parts[Joint.Part0]
-				local Part1 = Tab.Parts[Joint.Part1]
-		
-				if not Part0 or not Part1 then
-					return false
-				end
-		
-				local Clone = Instance.fromExisting(Joint)
-				Clone.Part0 = Part0
-				Clone.Part1 = Part1
-				Clone.Parent = Part0.Parent
-		
-				return true
-			end
-		
-			for Joint in PendingJoints do
-				if TrySetupJoint(Joint) then
-					PendingJoints[Joint] = nil
-				end
-			end
-		
-			ViewportChams:Clean(Entity.Character.DescendantAdded:Connect(function(Child)
-				if Child:IsA('JointInstance') then
-					if not TrySetupJoint(Child) then
-						PendingJoints[Child] = true
-					end
-					return
-				end
-				if not AllowedClasses[Child.ClassName] then return end
-		
-				local Clone = Instance.fromExisting(Child)
-				if Child:IsA('BasePart') then
-					Clone.Color = Entity.Player and Color.Color or NPC_Color.Color
-					Clone.LocalTransparencyModifier = Entity.Player and Color.Transparency or NPC_Color.Transparency
-					Tab.Parts[Child] = Clone
-		
-					for Joint in PendingJoints do
-						if Joint.Part0 == Child or Joint.Part1 == Child then
-							if TrySetupJoint(Joint) then
-								PendingJoints[Joint] = nil
-							end
-						end
-					end
-				else
-					OtherObjects[Child] = Clone
-				end
-				
-				if Child:IsA('Animator') then
-					ClonedAnimator = Clone
-				elseif Child == Entity.Root then
-					Tab.Root = Entity.Root
-				end
-				
-				Clone.Parent = Tab.Parts[Child.Parent] or OtherObjects[Child.Parent] or Model
-			end))
-		
-			ViewportChams:Clean(Entity.Character.DescendantRemoving:Connect(function(Child)
-				if not AllowedClasses[Child.ClassName] then return end
-				if Tab.Parts[Child] then
-					Tab.Parts[Child]:Destroy()
-					Tab.Parts[Child] = nil
-				elseif OtherObjects[Child] then
-					OtherObjects[Child]:Destroy()
-					OtherObjects[Child] = nil
-				end
-			end))
-		
-			const function AnimationPlayed(Track: AnimationTrack)
-				if not Track.Animation then
-					for i = 1, 3 do
-						task.wait()
-						if Track.Animation then break end
-					end
-				end
-		
-				if Track.Animation then
-					local ClonedTrack = Tab.Tracks[Track] or ClonedAnimator:LoadAnimation(Track.Animation)
-					ClonedTrack.Looped = Track.Looped
-					ClonedTrack:Play(0, Track.WeightCurrent, Track.Speed)
-					ClonedTrack.TimePosition = Track.TimePosition
-					
-					if not Tab.Tracks[Track] then
-						Tab.Tracks[Track] = ClonedTrack
-					end
-			
-					ViewportChams:Clean(Track.Ended:Once(function()
-						Track:Stop(0)
-					end))
-				end
-			end
-		
-			ViewportChams:Clean(Entity.Humanoid.AnimationPlayed:Connect(AnimationPlayed))
-			for _, Track in Entity.Humanoid:GetPlayingAnimationTracks() do
-				AnimationPlayed(Track)
-			end
-		
-			table.insert(Entities, Tab)
-		end
-		
-		const function RenderChams()
-			const CameraCFrame = Camera.CFrame
-			const CameraLookDirection: vector = CameraCFrame.LookVector
-			const CameraPosition: vector = Camera.CFrame.Position
-			
-			for _, Tab in Entities do
-				const Entity = Tab.Entity
-		
-				if vector.dot(vector.normalize(Entity.Root.Position - CameraPosition), CameraLookDirection) >= 0 then
-					Entity.Root.CFrame = Entity.Root.CFrame
-					for Track, Clone in Tab.Tracks do
-						if Clone.WeightCurrent ~= Track.WeightCurrent then
-							Clone:AdjustWeight(Track.WeightCurrent)
-						end
-						if Clone.Speed ~= Track.Speed then
-							Clone:AdjustSpeed(Track.Speed)
-						end
-						if Clone.TimePosition ~= Track.TimePosition then
-							Clone.TimePosition = Track.TimePosition
-						end
-					end
-				end
-			end
-		end
-		
-		ViewportChams = Visuals:CreateModule({
-			Name = 'ViewportChams',
-			Info = 'Renders Players/NPCs through walls using viewport frames. (This is way laggier than regular chams).',
-			Function = function(Enabled)
-				if Enabled then
-					ViewportFrame = Instance.new('ViewportFrame')
-					ViewportFrame.Name = 'ViewportChams'
-					ViewportFrame.Size = UDim2.fromScale(1, 1)
-					ViewportFrame.BackgroundTransparency = 1
-					ViewportFrame.CurrentCamera = Camera
-					ViewportFrame.Ambient = Color3.White
-					ViewportFrame.LightColor = Color3.White
-					ViewportFrame.ImageColor3 = GlobalColor.Color
-					ViewportFrame.ImageTransparency = GlobalColor.Transparency
-					ViewportFrame.LightDirection = vector.zero
-					ViewportFrame.ZIndex = -1
-					ViewportFrame.Parent = TidalWave.Gui
-		
-					ViewportModel = Instance.new('WorldModel')
-					ViewportModel.Name = 'ChamsWorldModel'
-					ViewportModel.Parent = ViewportFrame
-					
-					ViewportChams:Clean(EntityLib.Events.EntityAdded:Connect(EntityAdded))
-					ViewportChams:Clean(EntityLib.Events.EntityRemoved:Connect(EntityRemoved))
-					ViewportChams:Clean(RunService.PreRender:Connect(RenderChams))
-					for _, Entity in EntityLib.List do
-						EntityAdded(Entity)
-					end
-				else
-					ViewportFrame:Destroy()
-					ViewportFrame = nil
-					ViewportModel = nil
-					table.clear(Entities)
-				end
-			end,
-			ExtraText = function()
-				return tostring(#Entities)
-			end
-		})
-		
-		Priority = ViewportChams:CreateDropdown({
-			Name = 'Priority',
-			List = {'All', 'Enemies', 'Teammates', 'Friends'},
-			Restart = true
-		})
-		
-		ShowPlayers = ViewportChams:CreateToggle({
-			Name = 'Players',
-			Info = 'Whether or not to show players',
-			Default = true,
-			Function = function()
-				ViewportChams:Restart()
-			end
-		})
-		
-		Color = ShowPlayers:CreateColorPicker({
-			Name = 'Color',
-			Function = function(Color)
-				for _, Tab in Entities do
-					local Entity = Tab.Entity
-					if Entity.Player then
-						for _, Part in Tab.Parts do
-							Part.Color = Color
-						end
-					end
-				end
-			end
-		})
-		
-		ShowNPCs = ViewportChams:CreateToggle({
-			Name = 'NPCs',
-			Info = 'Whether or not to show NPCs',
-			Function = function()
-				ViewportChams:Restart()
-			end
-		})
-		
-		NPC_Color = ShowNPCs:CreateColorPicker({
-			Name = 'Color',
-			Function = function(Color)
-				for _, Tab in Entities do
-					local Entity = Tab.Entity
-					if Entity.NPC then
-						for _, Part in Tab.Parts do
-							Part.Color = Color
-						end
-					end
-				end
-			end
-		})
-		
-		GlobalColor = ViewportChams:CreateColorPicker({
-			Name = 'Global Color',
-			Function = function(Color, Transparency)
-				if ViewportFrame then
-					ViewportFrame.ImageColor3 = Color
-					ViewportFrame.ImageTransparency = Transparency
-				end
-			end
-		})
-	end)
-
 	Run(function() -- WaterModifier
 		local WaterModifier, WaterColor, WaterTransparency, WaterReflectance, WaterWaveSize, WaterWaveSpeed
 		
@@ -8914,6 +8671,7 @@ Run(function() -- Other
 			Default = 1,
 			Min = 0,
 			Max = 10,
+			Decimal = 10
 		})
 		
 		ShiftMultiplier = Freecam:CreateSlider({
@@ -8921,6 +8679,7 @@ Run(function() -- Other
 			Default = 2,
 			Min = 0,
 			Max = 10,
+			Decimal = 10
 		})
 		
 		Sensitivity = Freecam:CreateSlider({
@@ -8928,7 +8687,7 @@ Run(function() -- Other
 			Default = 1,
 			Min = 0.1,
 			Max = 3,
-			Decimal = 0.1
+			Decimal = 10
 		})
 		
 		CameraLimits = Freecam:CreateToggle({
@@ -9430,28 +9189,6 @@ Run(function() -- Other
 		Keybind = Zoom:CreateKeybind({
 			Name = 'Zoom',
 			Keybind = 'C'
-		})
-	end)
-
-	Run(function()
-		local AdminCommands, Command
-
-		AdminCommands = Other:CreateButton({
-			Name = 'AdminCommands',
-			Tooltip = 'Runs Commands to other TidalWave users even if they don\'t have chat.',
-			Function = function()
-				local Val = Command.Value
-				if not Val:match(';') then
-					Val = ';' .. Val
-				end
-
-				TidalWave.Libraries.Whitelist.Socket:Send(Val)
-			end
-		})
-
-		Command = AdminCommands:CreateTextBox({
-			Name = 'Command',
-			PlaceholderText = '[Command][Targets][Args]'
 		})
 	end)
 end)
