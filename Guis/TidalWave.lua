@@ -19,7 +19,7 @@ GetTextBoundsParams.Width = math.huge
 
 local TextGUI, Components, ModulesTopBar, ThemesDropdown
 local PrevMenu, HudMenu, GuiMenu, ConfigMenu, FriendsMenu, MenuOptions, ProfilesMenu
-local Gui, Tooltip, TopBar, GuiScale, Modala
+local Gui, Tooltip, TopBar, GuiScale, Modal
 local NotificationHolder, HudFolder, CategoryHolder, MenuHolder, CurrentColorPicker, ColorPickerHidMenuOptions
 
 const Plr: Player = Players.LocalPlayer
@@ -112,8 +112,8 @@ const BuiltInThemes = {
 		},
 		Slider = {
 			Handle = Color3.fromRGBT(18, 124, 230),
-			HandleHover = Color3.fromRGBT(0, 128, 255),
-			HandlePress = Color3.fromRGBT(18, 124, 230),
+			HandleHover = Color3.fromRGBT(16, 113, 210),
+			HandlePress = Color3.fromRGBT(19, 134, 250),
 			LeftBar = Color3.fromRGBT(14, 97, 180),
 			RightBar = Color3.fromRGBT(40, 40, 40),
 		},
@@ -142,7 +142,7 @@ local TidalWave = {
 	NotificationHorizontalAlignment = 'Right',
 	NotificationVerticalAlignment = 'Bottom',
 	NotificationFillDirection = 'Up',
-	Version = '2.3.0-beta',
+	Version = '2.4.1-beta',
 	Theme = 'TidalWave',
 	RGBTable = {
 		Linear = {},
@@ -1110,6 +1110,7 @@ function TidalWave:Shutdown()
 	LoopClean(self, true)
 	TidalWave = nil
 	shared.TidalWave = nil
+	shared.TidalWaveDev = nil
 end
 
 function TidalWave:Restart()
@@ -1477,23 +1478,18 @@ function TidalWave:StopRGB()
 end
 
 function TidalWave:Yield(Function)
-	const Thread = coroutine.running()
-	const Connection = self:Clean(coroutine.resume, Thread)
+	local Thread = coroutine.running()
+	local Con; Con = self:Clean(task.spawn(function()
+		local Result
+		repeat
+			Result = Function()
+			task.wait()
+		until Result
+		coroutine.resume(Thread)
+		Con:Disconnect()
+	end))
 
-	const NewFunction = function()
-		local Result = Function()
-		if not Result then
-			repeat
-				Result = Function()
-			until Result
-		end
-
-		Connection:Disconnect()
-	end
-
-	self:Clean(task.spawn(NewFunction))
-
-	return coroutine.yield()
+	coroutine.yield()
 end
 
 --#endregion Shared Functions
@@ -1501,14 +1497,14 @@ end
 function TidalWave:Init()
 	AddMaid(TidalWave)
 	Gui = Instance.new('ScreenGui')
-	Gui.Name = `TidalWave v{TidalWave.Version}`
+	Gui.Name = `TidalWave v{self.Version}`
 	Gui.IgnoreGuiInset = true
 	Gui.ResetOnSpawn = false
 	Gui.DisplayOrder = 69420
 	Gui.ZIndexBehavior = Enum.ZIndexBehavior.Global
 	pcall(function() Gui.OnTopOfCoreBlur = true end)
 	Gui.Parent = gethui()
-	TidalWave.Gui = Gui
+	self.Gui = Gui
 	
 	const ScaledGui = Instance.new('Frame')
 	ScaledGui.Name = 'ScaledGui'
@@ -1540,10 +1536,10 @@ function TidalWave:Init()
 	CategoryHolder.Visible = false
 	CategoryHolder.Parent = GuiFolder
 	
-	const CategoryHolderPadding = Instance.new('UIPadding')
-	CategoryHolderPadding.PaddingTop = UDim.new(0, GuiService.TopbarInset.Height + 2)
-	CategoryHolderPadding.PaddingLeft = UDim.new(0, 8)
-	CategoryHolderPadding.Parent = CategoryHolder
+	const TopBarInsetPadding = Instance.new('UIPadding')
+	TopBarInsetPadding.PaddingTop = UDim.new(0, (GuiService.TopbarInset.Height + 2) / GuiScale.Scale)
+	TopBarInsetPadding.PaddingLeft = UDim.new(0, 8)
+	TopBarInsetPadding.Parent = CategoryHolder
 	
 	MenuHolder = Instance.new('Frame')
 	MenuHolder.Name = 'Menus'
@@ -1626,15 +1622,15 @@ function TidalWave:Init()
 	Cursor.ZIndex = 69420
 	Cursor.Parent = Gui
 	
-	TidalWave:Clean(Gui:GetPropertyChangedSignal('AbsoluteSize'):Connect(function()
-		if TidalWave.Scale then
+	self:Clean(Gui:GetPropertyChangedSignal('AbsoluteSize'):Connect(function()
+		if self.Scale then
 			GuiScale.Scale = math.max(Gui.AbsoluteSize.X / 1920, 0.6)
 		end
 	end))
 	
-	TidalWave:Clean(GuiScale:GetPropertyChangedSignal('Scale'):Connect(function()
-		CategoryHolderPadding.PaddingTop = UDim.new(0, (GuiService.TopbarInset.Height + 2) / GuiScale.Scale)
-		CategoryHolderPadding.PaddingLeft = UDim.new(0, 8 / GuiScale.Scale)
+	self:Clean(GuiScale:GetPropertyChangedSignal('Scale'):Connect(function()
+		TopBarInsetPadding.PaddingTop = UDim.new(0, (GuiService.TopbarInset.Height + 2) / GuiScale.Scale)
+		TopBarInsetPadding.PaddingLeft = UDim.new(0, 8 / GuiScale.Scale)
 		ScaledGui.Size = UDim2.fromScale(1 / GuiScale.Scale, 1 / GuiScale.Scale)
 		for _, v in ScaledGui:QueryDescendants('GuiObject[Visible = true]') do
 			v.Visible = false
@@ -1642,17 +1638,21 @@ function TidalWave:Init()
 		end
 	end))
 	
-	TidalWave:Clean(workspace:GetPropertyChangedSignal('CurrentCamera'):Connect(function()
+	self:Clean(workspace:GetPropertyChangedSignal('CurrentCamera'):Connect(function()
 		Camera = cloneref(workspace.CurrentCamera or workspace:FindFirstChildOfClass('Camera') or Instance.new('Camera'))
 	end))
 
-	TidalWave:Clean(task.spawn(function()
+	self:Clean(GuiService:GetPropertyChangedSignal('TopbarInset'):Connect(function()
+		TopBarInsetPadding.PaddingTop = UDim.new(0, (GuiService.TopbarInset.Height + 2) / GuiScale.Scale)
+	end))
+
+	self:Clean(task.spawn(function()
 		while task.wait(10) do
-			TidalWave:Save()
+			self:Save()
 		end
 	end))
 
-	TidalWave:Clean(TidalWave.StopRGB, TidalWave)
+	self:Clean(self.StopRGB, self)
 	
 	local StopEditingHudPositions, StartEditingHudPositions, AllowMouseBinding, MenuKeybind, DoneButton
 	
@@ -3276,8 +3276,10 @@ Components = {
 			AddHighlight(Button, nil, true)
 			AddMaid(Module)
 			AddInstanceTable(Module)
-			ListenObject(Button, 'Background/Button', 'Text/Primary', function()
+			ListenObject(Button, 'Background/Button', nil, function()
 				Button.BackgroundColor3 = (SearchMatches[Button] or Button.GuiState == Enum.GuiState.Hover) and GetColor('Background/ButtonHover') or GetColor('Background/Button')
+			end)
+			ListenObject(Button, 'Text/ModuleEnabled', 'Text/Primary', function()
 				Button.TextColor3 = Module.Enabled and GetColor('Text/ModuleEnabled') or GetColor('Text/Primary')
 			end)
 			ListenFont(Button, 'Regular')
@@ -3607,7 +3609,7 @@ Components = {
 			const DefaultG = math.round(DefaultColor.G * 255)
 			const DefaultB = math.round(DefaultColor.B * 255)
 
-			const UseTransparency = if Properties.UseTransparency ~= nil then Properties.UseTransparency else true
+			const UseTransparency = Properties.UseTransparency or false
 			const DefaultTransparency = Properties.Transparency or Properties.DefaultTransparency or 0
 			const DefaultRainbow = if Properties.Rainbow ~= nil then Properties.Rainbow else false
 
@@ -3624,7 +3626,6 @@ Components = {
 
 			local Hue, Sat, Val = DefaultHue, DefaultSaturation, DefaultValue
 			local HoldHSV = false
-			local SavedTransparency = DefaultTransparency
 
 			const Name = Properties.Name
 			const SubbedName = Name:gsub(' ', '')
@@ -4133,17 +4134,17 @@ Components = {
 				LeftBar.Parent = SliderFrame
 				Handle.Parent = LeftBar
 
-				local HandleDragDetector = Instance.new('UIDragDetector')
-				HandleDragDetector.CursorIcon = 'rbxasset://textures/Cursors/KeyboardMouse/ArrowFarCursor.png'
-				HandleDragDetector.ActivatedCursorIcon = 'rbxasset://textures/Cursors/KeyboardMouse/ArrowFarCursor.png'
-				HandleDragDetector.DragStyle = Enum.UIDragDetectorDragStyle.TranslateLine
-				HandleDragDetector.DragAxis = Vector2.new(1, 0)
-				HandleDragDetector.ResponseStyle = Enum.UIDragDetectorResponseStyle.Offset
-				HandleDragDetector.Parent = Handle
+				local DragDetector = Instance.new('UIDragDetector')
+				DragDetector.CursorIcon = 'rbxasset://textures/Cursors/KeyboardMouse/ArrowFarCursor.png'
+				DragDetector.ActivatedCursorIcon = 'rbxasset://textures/Cursors/KeyboardMouse/ArrowFarCursor.png'
+				DragDetector.DragStyle = Enum.UIDragDetectorDragStyle.TranslateLine
+				DragDetector.DragAxis = Vector2.new(1, 0)
+				DragDetector.ResponseStyle = Enum.UIDragDetectorResponseStyle.Offset
+				DragDetector.Parent = Handle
 
 				FrameDragDetector.DragStart:Connect(OnFrameDragged)
 				FrameDragDetector.DragContinue:Connect(OnFrameDragged)
-				HandleDragDetector.DragContinue:Connect(function()
+				DragDetector.DragContinue:Connect(function()
 					OnFrameDragged('Slider')
 				end)
 
@@ -4151,20 +4152,17 @@ Components = {
 					Set(Input.Text)
 				end)
 
-				const HoverTween = TweenInfo.new(0.2)
-				const PressTween = TweenInfo.new(0.1)
-
 				Handle.MouseEnter:Connect(function()
-					TweenService:Create(Handle, HoverTween, {BackgroundColor3 = GetColor('Slider/HandleHover')}):Play()
+					Handle.BackgroundColor3 = GetColor('Slider/HandleHover')
 				end)
 				Handle.MouseLeave:Connect(function()
-					TweenService:Create(Handle, HoverTween, {BackgroundColor3 = GetColor('Slider/Handle')}):Play()
+					Handle.BackgroundColor3 = GetColor('Slider/Handle')
 				end)
-				Handle.MouseButton1Down:Connect(function()
-					TweenService:Create(Handle, PressTween, {BackgroundColor3 = GetColor('Slider/HandlePress')}):Play()
+				DragDetector.DragStart:Connect(function()
+					Handle.BackgroundColor3 = GetColor('Slider/HandlePress')
 				end)
-				Handle.MouseButton1Up:Connect(function()
-					TweenService:Create(Handle, PressTween, {BackgroundColor3 = GetColor('Slider/HandleHover')}):Play()
+				DragDetector.DragEnd:Connect(function()
+					Handle.BackgroundColor3 = GetColor('Slider/HandleHover')
 				end)
 
 				const Tab = {}
@@ -6127,22 +6125,6 @@ Components = {
 			AddCorner(Handle, UDim.new(1, 0))
 			ListenObject(Handle, 'Slider/Handle')
 			
-			local Info = TweenInfo.new(0.2)
-			local Info2 = TweenInfo.new(0.1)
-			
-			Handle.MouseEnter:Connect(function()
-				TweenService:Create(Handle, Info, {BackgroundColor3 = GetColor('Slider/HandleHover')}):Play()
-			end)
-			Handle.MouseLeave:Connect(function()
-				TweenService:Create(Handle, Info, {BackgroundColor3 = GetColor('Slider/Handle')}):Play()
-			end)
-			Handle.MouseButton1Down:Connect(function()
-				TweenService:Create(Handle, Info2, {BackgroundColor3 = GetColor('Slider/HandlePress')}):Play()
-			end)
-			Handle.MouseButton1Up:Connect(function()
-				TweenService:Create(Handle, Info2, {BackgroundColor3 = GetColor('Slider/HandleHover')}):Play()
-			end)
-			
 			local DragDetector = Instance.new('UIDragDetector')
 			DragDetector.CursorIcon = 'rbxasset://textures/Cursors/KeyboardMouse/ArrowFarCursor.png'
 			DragDetector.ActivatedCursorIcon = 'rbxasset://textures/Cursors/KeyboardMouse/ArrowFarCursor.png'
@@ -6151,8 +6133,8 @@ Components = {
 			DragDetector.ResponseStyle = Enum.UIDragDetectorResponseStyle.Offset
 			DragDetector.Parent = Handle
 			
-			local function OnFrameDragged(Type)
-				local Pos, Value = CalculatePosition(typeof(Type) == 'string' and Type or 'Mouse')
+			const function FrameDragged(Type)
+				local Pos, Value = CalculatePosition(Type or 'Mouse')
 				Handle.Position = UDim2.new(0, Pos, 0, -7)
 				LeftBar.Size = UDim2.fromOffset(Pos, 3)
 				RightBar.Size = UDim2.fromOffset(SliderFrame.Size.X.Offset - Pos, 3)
@@ -6164,11 +6146,24 @@ Components = {
 				end
 			end
 			
-			FrameDragDetector.DragStart:Connect(OnFrameDragged)
-			FrameDragDetector.DragContinue:Connect(OnFrameDragged)
+			FrameDragDetector.DragStart:Connect(FrameDragged)
+			FrameDragDetector.DragContinue:Connect(FrameDragged)
 			
+			DragDetector.DragStart:Connect(function()
+				Handle.BackgroundColor3 = GetColor('Slider/HandlePress')
+			end)
+			DragDetector.DragEnd:Connect(function()
+				Handle.BackgroundColor3 = GetColor('Slider/HandleHover')
+			end)
+			Handle.MouseEnter:Connect(function()
+				Handle.BackgroundColor3 = GetColor('Slider/HandleHover')
+			end)
+			Handle.MouseLeave:Connect(function()
+				Handle.BackgroundColor3 = GetColor('Slider/Handle')
+			end)
+
 			DragDetector.DragContinue:Connect(function()
-				OnFrameDragged('Slider')
+				FrameDragged('Slider')
 			end)
 			
 			local function InputNumber(Number)
@@ -6243,6 +6238,8 @@ Components = {
 			}
 			
 			const SubbedName = Properties.Name:gsub(' ', '')
+			const RequiresRestart = Properties.Restart == true
+			const Module = Properties.Module
 			
 			local Frame = Instance.new('Frame')
 			Frame.Name = `{Properties.Name}TextBox`
@@ -6311,6 +6308,10 @@ Components = {
 				if Properties.Function then
 					Properties.Function(TextBox.Value, false)
 				end
+
+				if RequiresRestart then
+					Module:Restart()
+				end
 			end)
 			
 			function TextBox:SetVisible(Visible)
@@ -6349,6 +6350,8 @@ Components = {
 			
 			const BindedOptions = {}
 			const SubbedName = Properties.Name:gsub(' ', '')
+			const RequiresRestart = Properties.Restart == true
+			const Module = Properties.Module
 			
 			const Frame = Instance.new('Frame')
 			Frame.Name = `{SubbedName}Toggle`
@@ -6372,8 +6375,10 @@ Components = {
 			AddCorner(Button, UDim.new(0, 7))
 			AddTooltip(Button, Properties.Tooltip or Properties.Info)
 			AddHighlight(Button)
-			ListenObject(Button, 'Background/Button', 'Text/Primary', function()
-				Button.BackgroundColor3 = Button.GuiState == Enum.GuiState.Hover and GetColor('Background/ButtonHover') or GetColor('Background/Button')
+			ListenObject(Button, 'Background/Button', 'Background/ButtonHover', function()
+				Button.BackgroundColor3 = (Button.GuiState == Enum.GuiState.Hover or SearchMatches[Frame]) and GetColor('Background/ButtonHover') or GetColor('Background/Button')
+			end)
+			ListenObject(Button, 'Text/ModuleEnabled', 'Text/Primary', function()
 				Button.TextColor3 = Toggle.Enabled and GetColor('Text/ModuleEnabled') or GetColor('Text/Primary')
 			end)
 			ListenFont(Button, 'Regular')
@@ -6419,8 +6424,8 @@ Components = {
 					task.spawn(Properties.Function, self.Enabled)
 				end
 
-				if Properties.Restart then
-					Properties.Module:Restart()
+				if RequiresRestart then
+					Module:Restart()
 				end
 			end
 			
@@ -6448,7 +6453,7 @@ Components = {
 			
 			function Toggle:Save(Tab)
 				Tab[SubbedName] = {
-					Enabled = self.Enabled,
+					Enabled = self.Enabled
 				}
 			end
 			
@@ -8765,9 +8770,15 @@ Components = {
 			end)
 			
 			function Dropdown:CreateButton(Properties)
-				while table.find(self.List, Properties.Name) do
-					Properties.Name ..= ' 2'
-				end
+				local Index
+				repeat
+					Index = table.find(self.List, Properties.Name)
+					if Index and table.find(self.List, Properties.Name, Index + 1) then
+						Properties.Name ..= ' 2'
+					else
+						break
+					end
+				until false
 				
 				local Button = Instance.new('TextButton')
 				Button.Size = UDim2.fromOffset(220, 30)
@@ -8815,8 +8826,8 @@ Components = {
 					local RenameTextBox = Instance.new('TextBox')
 					RenameTextBox.Name = 'Rename'
 					RenameTextBox.BackgroundTransparency = 1
-					RenameTextBox.Size = UDim2.fromOffset(220, 30)
-					RenameTextBox.Position = UDim2.fromOffset(10, 0)
+					RenameTextBox.Size = UDim2.fromOffset(215, 30)
+					RenameTextBox.Position = UDim2.fromOffset(0, 0)
 					RenameTextBox.TextSize = 20
 					RenameTextBox.TextColor3 = GetColor('Text/Primary')
 					RenameTextBox.FontFace = GetFont('Regular')

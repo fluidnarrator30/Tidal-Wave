@@ -225,15 +225,15 @@ TidalWave:Clean(DisconnectFrictionConnections)
 Run(function() -- Combat
 	Run(function() -- Aimbot
 		local Aimbot, Method, WallCheck, Part, Range, Speed
-		local Circle, OutlineColor, FillColor, Thickness
+		local Circle, OutlineColor, FillColor, OutlineTransparency, FillTransparency, Thickness
 		
 		local CircleObject
 		
 		const function CreateCircle()
 			CircleObject = Drawing.new('Circle')
 			CircleObject.Radius = Range.Value
-			CircleObject.FillTransparency = FillColor.Transparency
-			CircleObject.OutlineTransparency = OutlineColor.Transparency
+			CircleObject.FillTransparency = FillTransparency.Value
+			CircleObject.OutlineTransparency = OutlineTransparency.Value
 			CircleObject.FillColor = FillColor.Color
 			CircleObject.OutlineColor = OutlineColor.Color
 			CircleObject.Thickness = Thickness.Value
@@ -252,8 +252,8 @@ Run(function() -- Combat
 		const function UpdateCircle()
 			if CircleObject then
 				CircleObject.Radius = Range.Value
-				CircleObject.FillTransparency = FillColor.Transparency
-				CircleObject.OutlineTransparency = OutlineColor.Transparency
+				CircleObject.FillTransparency = FillTransparency.Value
+				CircleObject.OutlineTransparency = OutlineTransparency.Value
 				CircleObject.FillColor = FillColor.Color
 				CircleObject.OutlineColor = OutlineColor.Color
 				CircleObject.Thickness = Thickness.Value
@@ -356,6 +356,17 @@ Run(function() -- Combat
 			Transparency = 1,
 			Function = UpdateCircle
 		})
+
+		OutlineTransparency = Circle:CreateColorPicker({
+			Name = 'Outline Transparency',
+			Function = UpdateCircle
+		})
+
+		FillTransparency = Circle:CreateTransparencySlider({
+			Name = 'Fill Transparency',
+			Default = 1,
+			Function = UpdateCircle
+		})
 		
 		Thickness = Circle:CreateSlider({
 			Name = 'Thickness',
@@ -438,7 +449,7 @@ Run(function() -- Combat
 	end)
 
 	Run(function() -- HitboxExpander
-		local HitboxExpander, Target, Color, X, Y, Z, Collision
+		local HitboxExpander, Target, Color, Transparency, X, Y, Z, Collision
 		
 		const Parts = {}
 		const db = {}
@@ -453,7 +464,7 @@ Run(function() -- Combat
 		
 			Part.Size = vector.create(X.Value, Y.Value, Z.Value)
 			Part.Color = Color.Color
-			Part.Transparency = Color.Transparency
+			Part.Transparency = Transparency.Value
 			Part.CanCollide = Collision.Enabled
 			
 			HitboxExpander:Clean(Part.Changed:Connect(function(Property)
@@ -545,9 +556,7 @@ Run(function() -- Combat
 		Target = HitboxExpander:CreateDropdown({
 			Name = 'Target',
 			List = {'Head', 'Root', 'All'},
-			Function = function()
-				HitboxExpander:Restart()
-			end
+			Restart = true
 		})
 		
 		Color = HitboxExpander:CreateColorPicker({
@@ -561,6 +570,11 @@ Run(function() -- Combat
 				end
 				table.clear(db)
 			end
+		})
+
+		Transparency = HitboxExpander:CreateTransparencySlider({
+			Name = 'Transparency',
+			Default = 0.5
 		})
 		
 		Collision = HitboxExpander:CreateToggle({
@@ -578,7 +592,7 @@ Run(function() -- Combat
 
 	Run(function() -- KillAura
 		local KillAura, UsePlayers, UseNPCs, WallCheck, MaxTargets, CPS, SwingRange, AttackRange, AngleSlider, RequireMouseDown, Lunge
-		local BoxSwingColor, BoxAttackColor, ParticleTexture, ParticleSize, ParticleColor1, ParticleColor2, Face
+		local BoxSwingColor, BoxAttackColor, BoxSwingTransparency, BoxAttackTransparency, ParticleTexture, ParticleSize, ParticleColor1, ParticleColor2, Face
 		local AnimationEnabled, Animation, AnimationSpeed, UpdateRate
 		
 		local OldC0, Tween, StopTween, Attacking
@@ -699,7 +713,7 @@ Run(function() -- Combat
 				table.insert(Attacked, {
 					Entity = Entity,
 					Color = PastAttackRange and BoxSwingColor.Color or BoxAttackColor.Color,
-					Transparency = PastAttackRange and BoxSwingColor.Transparency or BoxAttackColor.Transparency
+					Transparency = PastAttackRange and BoxSwingTransparency.Value or BoxAttackTransparency.Value
 				})
 
 				Attacking = true
@@ -906,14 +920,22 @@ Run(function() -- Combat
 		
 		BoxSwingColor = ShowTarget:CreateColorPicker({
 			Name = 'Target Color',
-			Color = Color3.fromRGB(0, 100, 255),
-			Transparency = 0.5
+			Color = Color3.fromRGB(0, 100, 255)
 		})
 		
 		BoxAttackColor = ShowTarget:CreateColorPicker({
 			Name = 'Attack Color',
 			Color = Color3.fromRGB(255, 0, 0),
-			Transparency = 0.5
+		})
+
+		BoxSwingTransparency = ShowTarget:CreateTransparencySlider({
+			Name = 'Swing Transparency',
+			Default = 0.5
+		})
+
+		BoxAttackTransparency = ShowTarget:CreateTransparencySlider({
+			Name = 'Attack Transparency',
+			Default = 0.5
 		})
 		
 		local TargetParticles = KillAura:CreateToggle({
@@ -1010,12 +1032,11 @@ Run(function() -- Combat
 		AnimationEnabled = KillAura:CreateToggle({
 			Name = 'Custom Animation',
 			Info = 'Plays a custom Viewmodel animation',
+			Restart = true,
 			Function = function(Enabled)
 				if Enabled and not Modules.Viewmodel.Enabled then
 					Modules.Viewmodel:Toggle(true)
 				end
-
-				KillAura:Restart()
 			end
 		})
 		
@@ -1181,7 +1202,7 @@ Run(function() -- Combat
 	Run(function() -- SilentAim
 		local SilentAim, UsePlayers, UseNPCs, WallCheck, Mode, Method, RayMethod, IgnoredScripts, Range, HitChance, HeadshotChance
 		local AutoFire, AutoFireShootDelay, AutoFireMode, Wallbang, FunctionHook, OthHook
-		local Circle, OutlineColor, FillColor, Thickness
+		local Circle, OutlineColor, FillColor, OutlineTransparency, FillTransparency, Thickness
 		local Projectile, ProjectileSpeed, ProjectileGravity
 
 		const RaycastWhitelist, ProjectileRaycast = RaycastParams.new(), RaycastParams.new()
@@ -1203,11 +1224,10 @@ Run(function() -- Combat
 
 		const function CreateCircle()
 			RemoveCircle()
-
 			CircleObject = Drawing.new('Circle')
 			CircleObject.Radius = Range.Value
-			CircleObject.FillTransparency = FillColor.Transparency
-			CircleObject.OutlineTransparency = OutlineColor.Transparency
+			CircleObject.FillTransparency = FillTransparency.Value
+			CircleObject.OutlineTransparency = OutlineTransparency.Value
 			CircleObject.FillColor = FillColor.Color
 			CircleObject.OutlineColor = OutlineColor.Color
 			CircleObject.Thickness = Thickness.Value
@@ -1219,8 +1239,8 @@ Run(function() -- Combat
 		const function UpdateCircle()
 			if CircleObject then
 				CircleObject.Radius = Range.Value
-				CircleObject.FillTransparency = FillColor.Transparency
-				CircleObject.OutlineTransparency = OutlineColor.Transparency
+				CircleObject.FillTransparency = FillTransparency.Value
+				CircleObject.OutlineTransparency = OutlineTransparency.Value
 				CircleObject.FillColor = FillColor.Color
 				CircleObject.OutlineColor = OutlineColor.Color
 				CircleObject.Thickness = Thickness.Value
@@ -1601,6 +1621,17 @@ Run(function() -- Combat
 			Name = 'Fill Color',
 			Transparency = 1,
 			Function = UpdateCircle
+		})
+
+		OutlineTransparency = Circle:CreateTransparencySlider({
+			Name = 'Outline Transparency',
+			Function = UpdateCircle
+		})
+
+		FillTransparency = Circle:CreateTransparencySlider({
+			Name = 'Fill Transparency',
+			Default = 1,
+			Function = UpdateCircle,
 		})
 
 		Thickness = Circle:CreateSlider({
@@ -2662,7 +2693,7 @@ Run(function() -- Movement
 	end)
 
 	Run(function() -- Float
-		local Float, Method, Color, UpOffset, DownOffset, UpSpeed, DownSpeed, UpKeybind, DownKeybind
+		local Float, Method, Color, Transparency, UpOffset, DownOffset, UpSpeed, DownSpeed, UpKeybind, DownKeybind
 		local E, Q, EDown, QDown
 		local Part
 		
@@ -2677,7 +2708,7 @@ Run(function() -- Movement
 					if Method.Value == 'Part' then
 						Part = Float:CreateInstance('Part', 'Part', {
 							Color = Color.Color,
-							Transparency = Color.Transparency,
+							Transparency = Transparency.Value,
 							Size = vector.create(2, 0.2, 2),
 							Anchored = true,
 							CanTouch = false,
@@ -2769,9 +2800,7 @@ Run(function() -- Movement
 		Method = Float:CreateDropdown({
 			Name = 'Method',
 			List = {'Part', 'LinearVelocity'},
-			Function = function(Val)
-				Float:Restart()
-			end
+			Restart = true
 		})
 		
 		UpOffset = Method:BindSliderTo('Part', {
@@ -2793,9 +2822,18 @@ Run(function() -- Movement
 		Color = Method:BindColorPickerTo('Part', {
 			Name = 'Color',
 			Default = Color3.fromRGB(163, 162, 165),
-			Function = function(Color, Transparency)
+			Function = function(Color)
 				if Part then
 					Part.Color = Color
+				end
+			end
+		})
+		
+		Transparency = Method:BindTransparencySliderTo('Part', {
+			Name = 'Transparency',
+			Default = 1,
+			Function = function(Transparency)
+				if Part then
 					Part.Transparency = Transparency
 				end
 			end
@@ -4087,16 +4125,14 @@ Run(function() -- Movement
 			Name = 'Method',
 			List = {'LinearVelocity', 'Velocity', 'CFrame', 'WalkSpeed'},
 			Info = 'LinearVelocity - Uses a LinearVelocity Instance to modify your Velocity.\nVelocity - Directly adjusts the Velocity of your character.\nCFrame - Directly adjusts the position of your character.\nWalkSpeed - Adjusts the WalkSpeed of your Humanoid.',
+			Restart = true,
 			Function = function(Val)
-				if Speed.Enabled then
-					if Val ~= 'WalkSpeed' and OldWalkSpeed then
-						if EntityLib.Alive then
-							LocalRemoved()
-							EntityLib.Humanoid.WalkSpeed = OldWalkSpeed
-						end
-						OldWalkSpeed = nil
+				if Speed.Enabled and Val ~= 'WalkSpeed' and OldWalkSpeed then
+					if EntityLib.Alive then
+						LocalRemoved()
+						EntityLib.Humanoid.WalkSpeed = OldWalkSpeed
 					end
-					Speed:Restart()
+					OldWalkSpeed = nil
 				end
 			end
 		})
@@ -4911,8 +4947,8 @@ Run(function() -- Visuals
 
 	Run(function() -- BoxESP
 		local BoxESP, Mode, Priority, UseTeamColor, Thickness, SizeX, SizeY
-		local UsePlayers, OutlineColor, FillColor
-		local UseNPCs, NPC_FillColor, NPC_OutlineColor
+		local UsePlayers, OutlineColor, FillColor, OutlineTransparency, FillTransparency
+		local UseNPCs, NPC_FillColor, NPC_OutlineColor, NPC_OutlineTransparency, NPC_FillTransparency
 		local UseLimits, MinDistance, MaxDistance
 		
 		local Folder
@@ -4967,8 +5003,8 @@ Run(function() -- Visuals
 			const Player = Entity.Player
 			const Name = Player and Player.Name or Entity.Character.Name
 			const EntityColor = UseTeamColor.Enabled and EntityLib:GetEntityColor(Entity) or nil
-			const OutlineTransparency = Player and OutlineColor.Transparency or NPC_OutlineColor.Transparency
-			const FillTransparency = Player and FillColor.Transparency or NPC_FillColor.Transparency
+			const OutlineTransparency = Player and OutlineTransparency.Value or NPC_OutlineTransparency.Value
+			const FillTransparency = Player and FillTransparency.Value or NPC_FillTransparency.Value
 			const OutlineColor = EntityColor or (Player and OutlineColor.Color or NPC_OutlineColor.Color)
 			const FillColor = EntityColor or (Player and FillColor.Color or NPC_FillColor.Color)
 
@@ -5154,13 +5190,13 @@ Run(function() -- Visuals
 					const Outline = Frame.UIStroke
 			
 					Frame.BackgroundColor3 = EntityColor or (Player and FillColor.Color or NPC_FillColor.Color)
-					Frame.BackgroundTransparency = Player and FillColor.Transparency or NPC_FillColor.Transparency
-					Outline.Transparency = Player and OutlineColor.Transparency or NPC_OutlineColor.Transparency
+					Frame.BackgroundTransparency = Player and FillTransparency.Value or NPC_FillTransparency.Value
+					Outline.Transparency = Player and OutlineTransparency.Value or NPC_OutlineTransparency.Value
 					Outline.Color = EntityColor or (Player and OutlineColor.Color or NPC_OutlineColor.Color)
 					Outline.Thickness = Thickness.Value
 				else
 					Tab.Canvas.GroupColor3 = EntityColor or (Player and OutlineColor.Color or NPC_OutlineColor.Color)
-					Tab.Canvas.GroupTransparency = Player and OutlineColor.Transparency or NPC_OutlineColor.Transparency
+					Tab.Canvas.GroupTransparency = Player and OutlineTransparency.Value or NPC_OutlineTransparency.Value
 					Tab.MainLine.Thickness = Thickness.Value
 					Tab.ExtraLine1.Thickness = Thickness.Value
 					Tab.ExtraLine2.Thickness = Thickness.Value
@@ -5245,7 +5281,17 @@ Run(function() -- Visuals
 		
 		FillColor = UsePlayers:CreateColorPicker({
 			Name = 'Fill Color',
-			Transparency = 1,
+			Function = UpdateBoxes
+		})
+
+		OutlineTransparency = UsePlayers:CreateTransparencySlider({
+			Name = 'Outline Transparency',
+			Function = UpdateBoxes
+		})
+
+		FillTransparency = UsePlayers:CreateTransparencySlider({
+			Name = 'Fill Transparency',
+			Default = 1,
 			Function = UpdateBoxes
 		})
 		
@@ -5263,6 +5309,17 @@ Run(function() -- Visuals
 		NPC_FillColor = UseNPCs:CreateColorPicker({
 			Name = 'NPC Fill Color',
 			Transparency = 1,
+			Function = UpdateBoxes
+		})
+
+		NPC_OutlineTransparency = UseNPCs:CreateTransparencySlider({
+			Name = 'NPC Outline Transparency',
+			Function = UpdateBoxes
+		})
+
+		NPC_FillTransparency = UseNPCs:CreateTransparencySlider({
+			Name = 'NPC Fill Transparency',
+			Default = 1,
 			Function = UpdateBoxes
 		})
 		
@@ -5667,16 +5724,14 @@ Run(function() -- Visuals
 			Name = 'Texture',
 			Default = 'rbxassetid://14637958134',
 			Placeholder = '[rbxassetid://12345 | coolimage.png]',
-			Function = function()
-				Cape:Restart()
-			end
+			Restart = true
 		})
 	end)
 
 	Run(function() -- Chams
 		local Chams, Mode, Priority, UseTeamColor, UseLimits, MinDistance, MaxDistance
-		local ShowPlayers, OutlineColor, FillColor
-		local ShowNPCs, NPC_OutlineColor, NPC_FillColor
+		local ShowPlayers, OutlineColor, FillColor, OutlineTransparency, FillTransparency
+		local ShowNPCs, NPC_OutlineColor, NPC_FillColor, NPC_OutlineTransparency, NPC_FillTransparency
 		
 		local Folder
 		local Objects = {}
@@ -5721,8 +5776,8 @@ Run(function() -- Visuals
 				Highlight.Name = Name .. '_Chams'
 				Highlight.OutlineColor = EntityColor or (Player and OutlineColor.Color or NPC_OutlineColor.Color)
 				Highlight.FillColor = EntityColor or (Player and FillColor.Color or NPC_FillColor.Color)
-				Highlight.OutlineTransparency = (Player and OutlineColor.Transparency or NPC_OutlineColor.Transparency)
-				Highlight.FillTransparency = (Player and FillColor.Transparency or NPC_FillColor.Transparency)
+				Highlight.OutlineTransparency = (Player and OutlineTransparency.Value or NPC_OutlineTransparency.Value)
+				Highlight.FillTransparency = (Player and FillTransparency.Value or NPC_FillTransparency.Value)
 				Highlight.Adornee = Entity.Character
 
 				if UseLimits.Enabled and EntityLib.Alive then
@@ -5774,8 +5829,8 @@ Run(function() -- Visuals
 			
 					Highlight.OutlineColor = EntityColor or (Player and OutlineColor.Color or NPC_OutlineColor.Color)
 					Highlight.FillColor = EntityColor or (Player and FillColor.Color or NPC_FillColor.Color)
-					Highlight.OutlineTransparency = (Player and OutlineColor.Transparency or NPC_OutlineColor.Transparency)
-					Highlight.FillTransparency = (Player and FillColor.Transparency or NPC_FillColor.Transparency)
+					Highlight.OutlineTransparency = (Player and OutlineTransparency.Value or NPC_OutlineTransparency.Value)
+					Highlight.FillTransparency = (Player and FillTransparency.Value or NPC_FillTransparency.Value)
 				end
 			end
 		end
@@ -5901,7 +5956,17 @@ Run(function() -- Visuals
 		
 		FillColor = ShowPlayers:CreateColorPicker({
 			Name = 'Fill Color',
-			Transparency = 1,
+			Function = UpdateHighlights
+		})
+
+		OutlineTransparency = ShowPlayers:CreateTransparencySlider({
+			Name = 'Outline Transparency',
+			Function = UpdateHighlights
+		})
+
+		FillTransparency = ShowPlayers:CreateTransparencySlider({
+			Name = 'Fill Transparency',
+			Default = 0.5,
 			Function = UpdateHighlights
 		})
 		
@@ -5918,7 +5983,17 @@ Run(function() -- Visuals
 		
 		NPC_FillColor = ShowNPCs:CreateColorPicker({
 			Name = 'NPC Fill Color',
-			Transparency = 1,
+			Function = UpdateHighlights
+		})
+
+		NPC_OutlineTransparency = ShowNPCs:CreateTransparencySlider({
+			Name = 'NPC Outline Transparency',
+			Function = UpdateHighlights
+		})
+
+		NPC_FillTransparency = ShowNPCs:CreateTransparencySlider({
+			Name = 'NPC Fill Transparency',
+			Default = 0.5,
 			Function = UpdateHighlights
 		})
 
@@ -6073,7 +6148,6 @@ Run(function() -- Visuals
 					Bloom.Parent = Lighting
 		
 					local OldLightingProperties = {}
-		
 					for Prop, v in LightingProperties do
 						OldLightingProperties[Prop] = Lighting[Prop]
 						if EnabledProperties[Prop].Enabled then
@@ -6114,260 +6188,100 @@ Run(function() -- Visuals
 				end
 			end
 		})
-		
-		EnabledProperties.ExposureCompensation = Fullbright:CreateToggle({
-			Name = 'Set Exposure',
-			Default = true,
-			Restart = true
-		})
-		
-		LightingProperties.ExposureCompensation = EnabledProperties.ExposureCompensation:CreateSlider({
-			Name = 'Exposure',
-			Default = 0,
-			Min = -3,
-			Max = 3,
-			Decimal = 100,
-			Function = function(Val)
-				if Fullbright.Enabled and EnabledProperties.ExposureCompensation.Enabled then
-					db = true
-					Lighting.ExposureCompensation = Val
-					db = false
-				end
+
+		const function ChangeProperty(Property, Val)
+			if Fullbright.Enabled and EnabledProperties[Property].Enabled then
+				db = true
+				Lighting[Property] = Val
+				db = false
 			end
-		})
-		
-		EnabledProperties.Brightness = Fullbright:CreateToggle({
-			Name = 'Set Brightness',
-			Default = true,
-			Restart = true
-		})
-		
-		LightingProperties.Brightness = EnabledProperties.Brightness:CreateSlider({
-			Name = 'Brightness',
-			Default = 3,
-			Min = 0,
-			Max = 10,
-			Decimal = 10,
-			Function = function(Val)
-				if Fullbright.Enabled and EnabledProperties.Brightness.Enabled then
-					db = true
-					Lighting.Brightness = Val
-					db = false
+		end
+
+		const function AddProperty(Name: string, Property: string, Default: boolean?)
+			EnabledProperties[Property] = Fullbright:CreateToggle({
+				Name = Name,
+				Default = Default == true or Default == nil,
+				Restart = true
+			})
+		end
+
+		const function AddPropertySlider(Name: string, Property: string, Default: number, Min: number, Max: number, Decimal: number?)
+			LightingProperties[Property] = EnabledProperties[Property]:CreateSlider({
+				Name = Name,
+				Default = Default,
+				Min = Min,
+				Max = Max,
+				Decimal = Decimal,
+				Function = function(Val)
+					ChangeProperty(Property, Val)
 				end
-			end
-		})
-		
-		EnabledProperties.Ambient = Fullbright:CreateToggle({
-			Name = 'Set Ambient',
-			Default = true,
-			Restart = true
-		})
-		
-		LightingProperties.Ambient = EnabledProperties.Ambient:CreateColorPicker({
-			Name = 'Ambient',
-			Function = function(Color)
-				if Fullbright.Enabled and EnabledProperties.Ambient.Enabled then
-					db = true
-					Lighting.Ambient = Color
-					db = false
+			})
+		end
+
+		const function AddPropertyColorPicker(Name: string, Property: string, Default: Color3?)
+			LightingProperties[Property] = EnabledProperties[Property]:CreateColorPicker({
+				Name = Name,
+				Default = Default,
+				Function = function(Color)
+					ChangeProperty(Property, Color)
 				end
-			end
-		})
-		
-		EnabledProperties.OutdoorAmbient = Fullbright:CreateToggle({
-			Name = 'Set Outdoor Ambient',
-			Default = true,
-			Restart = true
-		})
-		
-		LightingProperties.OutdoorAmbient = EnabledProperties.OutdoorAmbient:CreateColorPicker({
-			Name = 'Outdoor Ambient',
-			Function = function(Color)
-				if Fullbright.Enabled and EnabledProperties.OutdoorAmbient.Enabled then
-					db = true
-					Lighting.OutdoorAmbient = Color
-					db = false
+			})
+		end
+
+		const function AddPropertyToggle(Name: string, Property: string, Default: boolean?)
+			LightingProperties[Property] = EnabledProperties[Property]:CreateToggle({
+				Name = Name,
+				Default = Default == true or Default == nil,
+				Function = function(Enabled)
+					ChangeProperty(Property, Enabled)
 				end
-			end
-		})
+			})
+		end
+
+		AddProperty('Set Exposure', 'ExposureCompensation')
+		AddPropertySlider('Exposure', 'ExposureCompensation', 0, -3, 3, 100)
+
+		AddProperty('Set Brightness', 'Brightness')
+		AddPropertySlider('Brightness', 'Brightness', 3, 0, 10, 10)
+
+		AddProperty('Set Ambient', 'Ambient')
+		AddPropertyColorPicker('Ambient', 'Ambient')
+
+		AddProperty('Set Outdoor Ambient', 'OutdoorAmbient')
+		AddPropertyColorPicker('Outdoor Ambient', 'OutdoorAmbient')
+
+		AddProperty('Set Color Shift Bottom', 'ColorShift_Bottom')
+		AddPropertyColorPicker('Color Shift Bottom', 'ColorShift_Bottom')
+
+		AddProperty('Set Color Shift Top', 'ColorShift_Top')
+		AddPropertyColorPicker('Color Shift Top', 'ColorShift_Top')
+
+		AddProperty('Set Shadows', 'GlobalShadows')
+		AddPropertyToggle('Shadows', 'GlobalShadows')
+
+		AddProperty('Set Diffuse Scale', 'EnvironmentDiffuseScale')
+		AddPropertySlider('Diffuse Scale', 'EnvironmentDiffuseScale', 0, 0, 1, 100)
+
+		AddProperty('Set Specular Scale', 'EnvironmentSpecularScale')
+		AddPropertySlider('Specular Scale', 'EnvironmentSpecularScale', 0, 0, 1, 100)
+
+		AddProperty('Set Clock Time', 'ClockTime')
+		AddPropertySlider('Clock Time', 'ClockTime', 0, 0, 24, 10)
 		
-		EnabledProperties.ColorShift_Bottom = Fullbright:CreateToggle({
-			Name = 'Set Color Shift Bottom',
-			Default = true,
-			Restart = true
-		})
-		
-		LightingProperties.ColorShift_Bottom = EnabledProperties.ColorShift_Bottom:CreateColorPicker({
-			Name = 'Color Shift Bottom',
-			Default = Color3.White,
-			Function = function(Color)
-				if Fullbright.Enabled and EnabledProperties.ColorShift_Bottom.Enabled then
-					db = true
-					Lighting.ColorShift_Bottom = Color
-					db = false
-				end
-			end
-		})
-		
-		EnabledProperties.ColorShift_Top = Fullbright:CreateToggle({
-			Name = 'Set Color Shift Top',
-			Default = true,
-			Restart = true
-		})
-		
-		LightingProperties.ColorShift_Top = EnabledProperties.ColorShift_Top:CreateColorPicker({
-			Name = 'Color Shift Top',
-			Default = Color3.White,
-			Function = function(Color)
-				if Fullbright.Enabled and EnabledProperties.ColorShift_Top.Enabled then
-					db = true
-					Lighting.ColorShift_Top = Color
-					db = false
-				end
-			end
-		})
-		
-		EnabledProperties.GlobalShadows = Fullbright:CreateToggle({
-			Name = 'Set Shadows',
-			Default = true,
-			Restart = true
-		})
-		
-		LightingProperties.GlobalShadows = EnabledProperties.GlobalShadows:CreateToggle({
-			Name = 'Shadows',
-			Function = function(Enabled)
-				if Fullbright.Enabled and EnabledProperties.GlobalShadows.Enabled then
-					db = true
-					Lighting.GlobalShadows = Enabled
-					db = false
-				end
-			end
-		})
-		
-		EnabledProperties.EnvironmentDiffuseScale = Fullbright:CreateToggle({
-			Name = 'Set Diffuse Scale',
-			Default = true,
-			Restart = true
-		})
-		
-		LightingProperties.EnvironmentDiffuseScale = EnabledProperties.EnvironmentDiffuseScale:CreateSlider({
-			Name = 'Diffuse Scale',
-			Default = 0,
-			Min = 0,
-			Max = 1,
-			Decimal = 100,
-			Function = function(Val)
-				if Fullbright.Enabled and EnabledProperties.EnvironmentDiffuseScale.Enabled then
-					db = true
-					Lighting.EnvironmentDiffuseScale = Val
-					db = false
-				end
-			end
-		})
-		
-		EnabledProperties.EnvironmentSpecularScale = Fullbright:CreateToggle({
-			Name = 'Set Specular Scale',
-			Default = true,
-			Restart = true
-		})
-		
-		LightingProperties.EnvironmentSpecularScale = EnabledProperties.EnvironmentSpecularScale:CreateSlider({
-			Name = 'Specular Scale',
-			Default = 0,
-			Min = 0,
-			Max = 1,
-			Decimal = 100,
-			Function = function(Val)
-				if Fullbright.Enabled and EnabledProperties.EnvironmentSpecularScale.Enabled then
-					db = true
-					Lighting.EnvironmentSpecularScale = Val
-					db = false
-				end
-			end
-		})
-		
-		EnabledProperties.ClockTime = Fullbright:CreateToggle({
-			Name = 'Set Clock Time',
-			Default = true,
-			Restart = true
-		})
-		
-		LightingProperties.ClockTime = EnabledProperties.ClockTime:CreateSlider({
-			Name = 'Clock Time',
-			Default = 12,
-			Min = 0,
-			Max = 24,
-			Decimal = 10,
-			Function = function(Val)
-				if Fullbright.Enabled and EnabledProperties.ClockTime.Enabled then
-					db = true
-					Lighting.ClockTime = Val
-					db = false
-				end
-			end
-		})
-		
-		EnabledProperties.FogStart = Fullbright:CreateToggle({
-			Name = 'Set Fog Start',
-			Default = true,
-			Restart = true
-		})
-		
-		LightingProperties.FogStart = EnabledProperties.FogStart:CreateSlider({
-			Name = 'Fog Start',
-			Default = Lighting.FogStart,
-			Min = 0,
-			Max = 100,
-			Function = function(Val)
-				if Fullbright.Enabled and EnabledProperties.FogStart.Enabled then
-					db = true
-					Lighting.FogStart = Val
-					db = false
-				end
-			end
-		})
-		
-		EnabledProperties.FogEnd = Fullbright:CreateToggle({
-			Name = 'Set Fog End',
-			Default = true,
-			Restart = true
-		})
-		
-		LightingProperties.FogEnd = EnabledProperties.FogEnd:CreateSlider({
-			Name = 'Fog End',
-			Default = 100000,
-			Min = 0,
-			Max = 100000,
-			Function = function(Val)
-				if Fullbright.Enabled and EnabledProperties.FogEnd.Enabled then
-					db = true
-					Lighting.FogEnd = Val
-					db = false
-				end
-			end
-		})
-		
-		EnabledProperties.FogColor = Fullbright:CreateToggle({
-			Name = 'Set Fog Color',
-			Restart = true
-		})
-		
-		LightingProperties.FogColor = EnabledProperties.FogColor:CreateColorPicker({
-			Name = 'Fog Color',
-			Function = function(Color)
-				if Fullbright.Enabled and EnabledProperties.FogColor.Enabled then
-					db = true
-					Lighting.FogColor = Color
-					db = false
-				end
-			end
-		})
+		AddProperty('Set Fog Start', 'FogStart')
+		AddPropertySlider('Fog Start', 'FogStart', 0, 0, 100)
+
+		AddProperty('Set Fog End', 'FogEnd')
+		AddPropertySlider('Fog End', 'FogEnd', 100000, 0, 100000)
+
+		AddProperty('Set Fog Color', 'FogColor')
+		AddPropertyColorPicker('Fog Color', 'FogColor')
 	end)
 
 	Run(function() -- NameTags
 		local NameTags, TextSize, Font, Priority, UseTeamColor, UseLimits, MinDistance, MaxDistance
-		local UsePlayers, TextColor, BackgroundColor
-		local UseNPCs, NPC_TextColor, NPC_BackgroundColor
+		local UsePlayers, TextColor, BackgroundColor, BackgroundTransparency
+		local UseNPCs, NPC_TextColor, NPC_BackgroundColor, NPC_BackgroundTransparency
 		local ShowName, ShowDisplayName, ShowHealth, ShowHealthAsPercentage, ShowDistance, PixelsOffset
 		
 		local Folder
@@ -6407,9 +6321,8 @@ Run(function() -- Visuals
 			TextLabel.Name = `{Player and Player.Name or Entity.Character.Name}_NameTag`
 			TextLabel.BorderSizePixel = 0
 			TextLabel.BackgroundColor3 = Player and BackgroundColor.Color or NPC_BackgroundColor.Color
-			TextLabel.BackgroundTransparency = Player and BackgroundColor.Transparency or NPC_BackgroundColor.Transparency
+			TextLabel.BackgroundTransparency = Player and BackgroundTransparency.Value or NPC_BackgroundTransparency.Value
 			TextLabel.TextColor3 = EntityColor or (Player and TextColor.Color or NPC_TextColor.Color)
-			TextLabel.TextTransparency = Player and TextColor.Transparency or NPC_TextColor.Transparency
 			TextLabel.TextSize = TextSize.Value
 			TextLabel.FontFace = Font.Value
 			TextLabel.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -6496,9 +6409,8 @@ Run(function() -- Visuals
 				const EntityColor = UseTeamColor.Enabled and EntityLib:GetEntityColor(Entity) or nil
 				
 				NameTag.BackgroundColor3 = Player and BackgroundColor.Color or NPC_BackgroundColor.Color
-				NameTag.BackgroundTransparency = Player and BackgroundColor.Transparency or NPC_BackgroundColor.Transparency
+				NameTag.BackgroundTransparency = Player and BackgroundTransparency.Value or NPC_BackgroundTransparency.Value
 				NameTag.TextColor3 = EntityColor or (Player and TextColor.Color or NPC_TextColor.Color)
-				NameTag.TextTransparency = Player and TextColor.Transparency or NPC_TextColor.Transparency
 				NameTag.TextSize = TextSize.Value
 				NameTag.FontFace = Font.Value
 			end
@@ -6560,7 +6472,12 @@ Run(function() -- Visuals
 		BackgroundColor = UsePlayers:CreateColorPicker({
 			Name = 'Background Color',
 			Default = Color3.Black,
-			Transparency = 0.5,
+			Function = UpdateNameTags
+		})
+		
+		BackgroundTransparency = UsePlayers:CreateTransparencySlider({
+			Name = 'Background Transparency',
+			Default = 0.5,
 			Function = UpdateNameTags
 		})
 		
@@ -6578,10 +6495,15 @@ Run(function() -- Visuals
 		NPC_BackgroundColor = UseNPCs:CreateColorPicker({
 			Name = 'NPC Background Color',
 			Default = Color3.Black,
-			Transparency = 0.5,
 			Function = UpdateNameTags
 		})
 		
+		NPC_BackgroundTransparency = UseNPCs:CreateTransparencySlider({
+			Name = 'NPC Background Transparency',
+			Default = 0.5,
+			Function = UpdateNameTags
+		})
+
 		TextSize = NameTags:CreateSlider({
 			Name = 'Text Size',
 			Default = 16,
@@ -6667,7 +6589,7 @@ Run(function() -- Visuals
 	end)
 
 	Run(function() -- PartESP
-		local PartESP, NameCheckMethod, HighlightType, OutlineColor, FillColor, SearchMethod, Names, FilterType
+		local PartESP, NameCheckMethod, HighlightType, OutlineColor, OutlineTransparency, FillColor, FillTransparency, SearchMethod, Names, FilterType
 		
 		local DepthMode
 		local Shading, ModelSizeMode
@@ -6694,8 +6616,8 @@ Run(function() -- Visuals
 				Highlight.Name = `{Part.Name}_ESP`
 				Highlight.OutlineColor = OutlineColor.Color
 				Highlight.FillColor = FillColor.Color
-				Highlight.OutlineTransparency = OutlineColor.Transparency
-				Highlight.FillTransparency = FillColor.Transparency
+				Highlight.OutlineTransparency = OutlineTransparency.Value
+				Highlight.FillTransparency = FillTransparency.Value
 				Highlight.DepthMode = Enum.HighlightDepthMode[DepthMode.Value]
 				Highlight.Adornee = Part
 				Highlight.Parent = Folder
@@ -6707,7 +6629,7 @@ Run(function() -- Visuals
 				Box.Size = GetSize(Part)
 				Box.Name = `{Part.Name}_ESP`
 				Box.Color3 = FillColor.Color
-				Box.Transparency = FillColor.Transparency
+				Box.Transparency = FillTransparency.Value
 				Box.Adornee = Part
 				Box.ZIndex = 1
 				Box.Parent = Folder
@@ -6789,13 +6711,13 @@ Run(function() -- Visuals
 			for Highlight in Highlights do
 				Highlight.OutlineColor = OutlineColor.Color
 				Highlight.FillColor = FillColor.Color
-				Highlight.OutlineTransparency = OutlineColor.Transparency
-				Highlight.FillTransparency = FillColor.Transparency
+				Highlight.OutlineTransparency = OutlineTransparency.Value
+				Highlight.FillTransparency = FillTransparency.Value
 			end
 		
 			for Box in BoxConnections do
 				Box.Color3 = FillColor.Color
-				Box.Transparency = FillColor.Transparency
+				Box.Transparency = FillTransparency.Value
 			end
 		end
 		
@@ -6884,7 +6806,17 @@ Run(function() -- Visuals
 		
 		FillColor = PartESP:CreateColorPicker({
 			Name = 'Fill Color',
-			Transparency = 0.5,
+			Function = UpdateHighlights
+		})
+
+		OutlineTransparency = HighlightType:BindTransparencySliderTo('Highlight', {
+			Name = 'Outline Transparency',
+			Function = UpdateHighlights
+		})
+
+		FillTransparency = PartESP:CreateTransparencySlider({
+			Name = 'Fill Transparency',
+			Default = 0.5,
 			Function = UpdateHighlights
 		})
 		
@@ -6953,8 +6885,8 @@ Run(function() -- Visuals
 
 	Run(function() -- Tracers
 		local Tracers, Priority, UseTeamColor, Thickness, TracerPosition, TracerTarget, TracerOffsetX, TracerOffsetY, TracerOffsetZ
-		local UsePlayers, Color
-		local UseNPCs, NPC_Color
+		local UsePlayers, Color, Transparency
+		local UseNPCs, NPC_Color, NPC_Transparency
 		local XBoxConnect, HideMainTracer
 		
 		local ScreenGui, PlayerHolder, NPC_Holder
@@ -7228,8 +7160,8 @@ Run(function() -- Visuals
 		
 		const function UpdateTracers()
 			if not Tracers.Enabled then return end
-			PlayerHolder.GroupTransparency = Color.Transparency
-			NPC_Holder.GroupTransparency = Color.Transparency
+			PlayerHolder.GroupTransparency = Transparency.Value
+			NPC_Holder.GroupTransparency = NPC_Transparency.Value
 
 			for _, Tab in TracerObjects do
 				const Entity = Tab.Entity
@@ -7310,6 +7242,11 @@ Run(function() -- Visuals
 			Name = 'Color',
 			Function = UpdateTracers
 		})
+
+		Transparency = UsePlayers:CreateTransparencySlider({
+			Name = 'Transparency',
+			Function = UpdateTracers
+		})
 		
 		UseNPCs = Tracers:CreateToggle({
 			Name = 'NPCs',
@@ -7319,6 +7256,11 @@ Run(function() -- Visuals
 		
 		NPC_Color = UseNPCs:CreateColorPicker({
 			Name = 'NPC Color',
+			Function = UpdateTracers
+		})
+
+		NPC_Transparency = UseNPCs:CreateTransparencySlider({
+			Name = 'NPC Transparency',
 			Function = UpdateTracers
 		})
 		
@@ -8035,9 +7977,7 @@ Run(function() -- World
 		Mode = FastProximityPrompts:CreateDropdown({
 			Name = 'Mode',
 			List = {'Signal', 'Property'},
-			Function = function()
-				FastProximityPrompts:Restart()
-			end
+			Restart = true
 		})
 		
 		Duration = FastProximityPrompts:CreateSlider({
@@ -8126,9 +8066,7 @@ Run(function() -- World
 		Method = Gravity:CreateDropdown({
 			Name = 'Method',
 			List = {'Velocity', 'Gravity'},
-			Function = function()
-				Gravity:Restart()
-			end
+			Restart = true
 		})
 	end)
 
@@ -10112,9 +10050,7 @@ Run(function() -- Hud
 			Name = 'Mode',
 			List = {'Magnitude', 'Velocity'},
 			Info = 'Magnitude - Calculates the distance you traveled\nVelocity - Shows your current velocity',
-			Function = function()
-				SpeedMeter:Restart()
-			end
+			Restart = true
 		})
 	end)
 end)

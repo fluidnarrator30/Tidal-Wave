@@ -27,6 +27,9 @@ const getcustomasset = getcustomasset or function(Path) return `rbxasset://{Path
 local writefile, makefolder, isfolder, isfile, readfile, listfiles, delfile = writefile, makefolder, isfolder or function(s) return false end, isfile or function(s) return false end, readfile, listfiles, delfile
 
 const RootPath = IsStudio and script.Parent or nil
+local Gui = 'TidalWave'
+local SupportedGame
+local Commit = 'main'
 
 if IsStudio then
 	shared.RootPath = RootPath
@@ -38,14 +41,14 @@ end
 const function DownloadFile(Path, Function)
 	if not isfile(Path) then
 		const Success, Result = pcall(function()
-			return game:HttpGet(`https://raw.githubusercontent.com/fluidnarrator30/Tidal-Wave/{readfile('TidalWave/Profiles/Commit.txt')}/{Path:gsub('TidalWave/', '')}`, true)
+			return game:HttpGet(`https://raw.githubusercontent.com/fluidnarrator30/Tidal-Wave/{Commit}/{Path}`, true)
 		end)
         if Success and Result ~= '404: Not Found' then
             writefile(Path, Result)
         end
 	end
     
-    return (Function or readfile)(Path)
+    return (Function or readfile)(`TidalWave/{Path}`)
 end
 
 const function WipeFolder(Path)
@@ -83,9 +86,6 @@ for _, v in {'TidalWave', 'TidalWave/Games', 'TidalWave/Guis', 'TidalWave/Librar
     end
 end
 
-local Gui = 'TidalWave'
-local SupportedGame
-
 if isfile('TidalWave/Profiles/Gui.txt') then
     Gui = readfile('TidalWave/Profiles/Gui.txt')
 else
@@ -96,8 +96,6 @@ if not IsStudio then
     if shared.TidalWaveDev then
         SupportedGame = isfile(`TidalWave/Games/{game.PlaceId}.lua`) and readfile(`TidalWave/Games/{game.PlaceId}.lua`) or nil
     else
-        local Commit = 'main'
-
         const Success, GitHub = pcall(function()
             return game:HttpGet('https://github.com/fluidnarrator30/Tidal-Wave')
         end)
@@ -153,7 +151,7 @@ const ImageLabel = Instance.new('ImageLabel')
 ImageLabel.Size = UDim2.fromOffset(125, 72)
 ImageLabel.BackgroundTransparency = 1
 ImageLabel.Position = UDim2.fromOffset(87, 10)
-ImageLabel.Image = DownloadFile('TidalWave/Assets/LoadingIcon.webp', getcustomasset)
+ImageLabel.Image = DownloadFile('Assets/LoadingIcon.webp', getcustomasset)
 ImageLabel.Parent = LoadingFrame
 
 const LoadingInfo = Instance.new('TextLabel')
@@ -203,7 +201,7 @@ const function Load(Path, Name)
         IncrementBar()
         return Result
     else
-        const Function, LoadResult = loadstring(DownloadFile(`TidalWave/{Path}`), Name)
+        const Function, LoadResult = loadstring(DownloadFile(Path), Name)
         if Function then
             const Result = Function()
             IncrementBar()
