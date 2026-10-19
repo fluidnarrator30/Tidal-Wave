@@ -39,7 +39,7 @@ if IsStudio then
 end
 
 const function DownloadFile(Path, Function)
-	if not isfile(Path) then
+	if not isfile(`TidalWave/{Path}`) then
 		const Success, Result = pcall(function()
 			return game:HttpGet(`https://raw.githubusercontent.com/fluidnarrator30/Tidal-Wave/{Commit}/{Path}`, true)
 		end)
