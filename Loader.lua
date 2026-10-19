@@ -39,16 +39,16 @@ if IsStudio then
 end
 
 const function DownloadFile(Path, Function)
-	if not isfile(`TidalWave/{Path}`) then
+	if not isfile(Path) then
 		const Success, Result = pcall(function()
-			return game:HttpGet(`https://raw.githubusercontent.com/fluidnarrator30/Tidal-Wave/{Commit}/{Path}`, true)
+			return game:HttpGet(`https://raw.githubusercontent.com/fluidnarrator30/Tidal-Wave/{Commit}/{Path:gsub('TidalWave/', '')}`, true)
 		end)
         if Success and Result ~= '404: Not Found' then
             writefile(Path, Result)
         end
 	end
     
-    return (Function or readfile)(`TidalWave/{Path}`)
+    return (Function or readfile)(Path)
 end
 
 const function WipeFolder(Path)
@@ -151,7 +151,7 @@ const ImageLabel = Instance.new('ImageLabel')
 ImageLabel.Size = UDim2.fromOffset(125, 72)
 ImageLabel.BackgroundTransparency = 1
 ImageLabel.Position = UDim2.fromOffset(87, 10)
-ImageLabel.Image = DownloadFile('Assets/LoadingIcon.webp', getcustomasset)
+ImageLabel.Image = DownloadFile('TidalWave/Assets/LoadingIcon.webp', getcustomasset)
 ImageLabel.Parent = LoadingFrame
 
 const LoadingInfo = Instance.new('TextLabel')
@@ -201,7 +201,7 @@ const function Load(Path, Name)
         IncrementBar()
         return Result
     else
-        const Function, LoadResult = loadstring(DownloadFile(Path), Name)
+        const Function, LoadResult = loadstring(DownloadFile(`TidalWave/{Path}`), Name)
         if Function then
             const Result = Function()
             IncrementBar()
