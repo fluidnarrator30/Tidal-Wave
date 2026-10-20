@@ -1,4 +1,6 @@
-if not game:IsLoaded() then game.Loaded:Wait() end
+if not game:IsLoaded() then
+	game.Loaded:Wait()
+end
 
 if shared.TidalWave then
     shared.TidalWave:Shutdown()
@@ -26,10 +28,14 @@ const gethui = gethui or function() return (CoreGui and CoreGui:FindFirstChild('
 const getcustomasset = getcustomasset or function(Path) return `rbxasset://{Path}` end
 local writefile, makefolder, isfolder, isfile, readfile, listfiles, delfile = writefile, makefolder, isfolder or function(s) return false end, isfile or function(s) return false end, readfile, listfiles, delfile
 
+const Color3 = table.clone(Color3)
+Color3.White = Color3.new(1, 1, 1)
+Color3.Black = Color3.new()
+
 const RootPath = IsStudio and script.Parent or nil
 local Gui = 'TidalWave'
-local SupportedGame
 local Commit = 'main'
+local SupportedGame
 
 if IsStudio then
 	shared.RootPath = RootPath
@@ -39,16 +45,16 @@ if IsStudio then
 end
 
 const function DownloadFile(Path, Function)
-	if not isfile(Path) then
+	if not isfile(`TidalWave/{Path}`) then
 		const Success, Result = pcall(function()
-			return game:HttpGet(`https://raw.githubusercontent.com/fluidnarrator30/Tidal-Wave/{Commit}/{Path:gsub('TidalWave/', '')}`, true)
+			return game:HttpGet(`https://raw.githubusercontent.com/fluidnarrator30/Tidal-Wave/{Commit}/{Path}`, true)
 		end)
         if Success and Result ~= '404: Not Found' then
             writefile(Path, Result)
         end
 	end
     
-    return (Function or readfile)(Path)
+    return (Function or readfile)(`TidalWave/{Path}`)
 end
 
 const function WipeFolder(Path)
@@ -96,13 +102,13 @@ if not IsStudio then
     if shared.TidalWaveDev then
         SupportedGame = isfile(`TidalWave/Games/{game.PlaceId}.lua`) and readfile(`TidalWave/Games/{game.PlaceId}.lua`) or nil
     else
-        const Success, GitHub = pcall(function()
+        const Success, Github = pcall(function()
             return game:HttpGet('https://github.com/fluidnarrator30/Tidal-Wave')
         end)
 
-        const Index = Success and GitHub and GitHub:find('currentOid')
+        const Index = Success and Github and Github:find('currentOid')
         if Index then
-            const Subbed = GitHub:sub(Index + 13, Index + 52)
+            const Subbed = Github:sub(Index + 13, Index + 52)
             if #Subbed == 40 then
                 Commit = Subbed
             end
@@ -132,7 +138,7 @@ if not IsStudio then
 end
 
 LoadingScreen = shared.TidalWaveLoader
-LoadingScreen.Name = 'TidalWave Loader'
+LoadingScreen.Name = 'TidalWaveLoader'
 LoadingScreen.DisplayOrder = 69420
 LoadingScreen.IgnoreGuiInset = true
 LoadingScreen.ResetOnSpawn = false
@@ -151,7 +157,7 @@ const ImageLabel = Instance.new('ImageLabel')
 ImageLabel.Size = UDim2.fromOffset(125, 72)
 ImageLabel.BackgroundTransparency = 1
 ImageLabel.Position = UDim2.fromOffset(87, 10)
-ImageLabel.Image = DownloadFile('TidalWave/Assets/LoadingIcon.webp', getcustomasset)
+ImageLabel.Image = DownloadFile('Assets/LoadingIcon.webp', getcustomasset)
 ImageLabel.Parent = LoadingFrame
 
 const LoadingInfo = Instance.new('TextLabel')
@@ -159,9 +165,9 @@ LoadingInfo.Size = UDim2.fromOffset(290, 35)
 LoadingInfo.BackgroundTransparency = 1
 LoadingInfo.Position = UDim2.fromOffset(5, 96)
 LoadingInfo.TextSize = 20
-LoadingInfo.TextColor3 = Color3.fromRGB(255, 255, 255)
-LoadingInfo.Text = ''
+LoadingInfo.TextColor3 = Color3.White
 LoadingInfo.FontFace = Font.fromEnum(Enum.Font.Gotham)
+LoadingInfo.Text = ''
 LoadingInfo.Parent = LoadingFrame
 
 const ProgressBar = Instance.new('CanvasGroup')
@@ -175,7 +181,7 @@ AddCorner(ProgressBar, UDim.new(0, 6))
 const ProgressBarFill = Instance.new('Frame')
 ProgressBarFill.Size = UDim2.fromScale(0, 1)
 ProgressBarFill.BorderSizePixel = 0
-ProgressBarFill.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+ProgressBarFill.BackgroundColor3 = Color3.White
 ProgressBarFill.Parent = ProgressBar
 
 local CurrentLoaded = 0
@@ -185,9 +191,11 @@ if SupportedGame then
     AmountToLoad += 1
 end
 
+const ProgressBar_TweenInfo = TweenInfo.new(0.4, Enum.EasingStyle.Exponential, Enum.EasingDirection.Out)
+
 const function IncrementBar()
     CurrentLoaded += 1
-    TweenService:Create(ProgressBarFill, TweenInfo.new(0.4, Enum.EasingStyle.Exponential, Enum.EasingDirection.Out), {Size = UDim2.fromScale(CurrentLoaded / AmountToLoad, 1)}):Play()
+    TweenService:Create(ProgressBarFill, ProgressBar_TweenInfo, {Size = UDim2.fromScale(CurrentLoaded / AmountToLoad, 1)}):Play()
 end
 
 const function Load(Path, Name)
@@ -201,7 +209,7 @@ const function Load(Path, Name)
         IncrementBar()
         return Result
     else
-        const Function, LoadResult = loadstring(DownloadFile(`TidalWave/{Path}`), Name)
+        const Function, LoadResult = loadstring(DownloadFile(Path), Name)
         if Function then
             const Result = Function()
             IncrementBar()
@@ -212,11 +220,20 @@ const function Load(Path, Name)
     end
 end
 
+const function CallFunctionsWaitingForSignalLibrary()
+	for _, Function in TidalWave.FunctionsWaitingForSignalLibrary do
+		Function()
+	end
+	table.clear(TidalWave.FunctionsWaitingForSignalLibrary)
+	TidalWave.FunctionsWaitingForSignalLibrary = nil
+end
+
 TidalWave = Load(`Guis/{Gui}.lua`, 'Gui')
 shared.TidalWave = TidalWave
 const Libraries = {}
 TidalWave.Libraries = Libraries
 Libraries.Signal = Load('Libraries/Signal.lua', 'Signal')
+CallFunctionsWaitingForSignalLibrary()
 Libraries.Drawing = Load('Libraries/Drawing.lua', 'Drawing')
 Libraries.ObjectFunctions = Load('Libraries/ObjectFunctions.lua', 'ObjectFunctions')
 Libraries.Prediction = Load('Libraries/Prediction.lua', 'Prediction')

@@ -84,7 +84,6 @@ const require = (IsStudio or (not table.find({'Solara', 'Xeno'}, identifyexecuto
 const loadstring = IsStudio and require(script.Parent.Parent.Libraries.Loadstring) or loadstring
 
 const GetTextBoundsParams = Instance.new('GetTextBoundsParams')
-const TopBar = TidalWave.Gui.ScaledGui.Gui.TopBar
 local ViewmodelTool
 local ViewmodelMotor
 local TargetStrafeVector
@@ -145,7 +144,7 @@ const function GetFullName(Object): string?
 end
 
 const function CanClick(): boolean
-	if TopBar.Visible then return false end
+	if TidalWave.TopBar.Visible then return false end
 	if UIS:GetFocusedTextBox() then return false end
 	if iswindowactive and not iswindowactive() then return false end
 
@@ -3096,6 +3095,7 @@ Run(function() -- Movement
 		
 					Fly:Clean(EntityLib.Events.LocalAdded:Connect(LocalAdded))
 					Fly:Clean(EntityLib.Events.LocalRemoved:Connect(LocalRemoved))
+					
 					Fly:Clean(RunService.PreRender:Connect(function()
 						if AlignMethod.Value ~= 'None' and EntityLib.Alive then
 							AlignMethods[AlignMethod.Value].Function()
@@ -3140,14 +3140,27 @@ Run(function() -- Movement
 								S = i
 							elseif Input.KeyCode == Enum.KeyCode.D then
 								D = i
-							elseif UpKeybind:Check(Input) then
-								E = i
-							elseif DownKeybind:Check(Input) then
-								Q = i
-							elseif ShiftKeybind:Check(Input) then
-								ShiftPressed = i == 1
 							end
 						end))
+					end
+
+					Fly:Clean(UpKeybind.Triggered:Connect(function(Pressed)
+						E = Pressed and 1 or 0
+					end))
+					Fly:Clean(DownKeybind.Triggered:Connect(function(Pressed)
+						Q = Pressed and 1 or 0
+					end))
+					Fly:Clean(ShiftKeybind.Triggered:Connect(function(Pressed)
+						ShiftPressed = Pressed
+					end))
+
+					if UIS.TouchEnabled then
+						local JumpButton: ImageLabel? = SafeRef(Plr, {'PlayerGui', 'TouchGui', 'TouchControlFrame', 'JumpButton'})
+						if JumpButton then
+							Fly:Clean(JumpButton:GetPropertyChangedSignal('ImageRectOffset'):Connect(function()
+								E = JumpButton.ImageRectOffset.X == 146 and 1 or 0
+							end))
+						end
 					end
 				else
 					Modules.Speed:EnableMovers()
@@ -3205,52 +3218,27 @@ Run(function() -- Movement
 			Name = 'Fly Method',
 			List = {'LinearVelocity', 'Velocity', 'CFrame'},
 			Tooltip = 'LinearVelocity - Uses a LinearVelocity object to modify your Velocity.\nVelocity - Adjusts the Velocity of your character.\nDirectly adjusts the position of your character.',
-			Function = function(Val)
-				if Fly.Enabled then
-					if Val ~= 'LinearVelocity' then
-						Fly:RemoveInstance('HortAttachment')
-						Fly:RemoveInstance('HortLinearVelocity')
-					end
-					FrictionTable.Fly = (Val == 'Velocity' or FloatMethod.Value == 'Velocity') or nil
-					UpdateFriction()
-				end
-			end
+			Restart = true
 		})
 
 		FloatMethod = Fly:CreateDropdown({
 			Name = 'Float Method',
 			List = {'LinearVelocity', 'Velocity', 'CFrame'},
 			Tooltip = 'LinearVelocity - Uses a LinearVelocity object to modify your Velocity.\nVelocity - Adjusts the Velocity of your character.\nDirectly adjusts the position of your character.',
-			Function = function(Val)
-				if Fly.Enabled then
-					if Val ~= 'LinearVelocity' then
-						Fly:RemoveInstance('VertAttachment')
-						Fly:RemoveInstance('VertLinearVelocity')
-					end
-					FrictionTable.Fly = (Val == 'Velocity' or FlyMethod.Value == 'Velocity') or nil
-					UpdateFriction()
-				end
-			end
+			Restart = true
 		})
 		
 		AlignMethod = Fly:CreateDropdown({
 			Name = 'Align Method',
-			List = {'AlignOrientation', 'CFrame', 'None'},
+			List = {'None', 'AlignOrientation', 'CFrame'},
 			Tooltip = 'AlignOrientation - Smoothly orientates your character based on the rotation of your camera.\nCFrame - Directly adjusts the Orientation of your character based on the rotation of your camera. (Recommended to use PlatformStand with this)\nNone - Doesn\'t align your character with your camera.',
-			Function = function(Val)
-				if Fly.Enabled then
-					if Val ~= 'AlignOrientation' then
-						Fly:RemoveInstance('AlignOrientation')
-						Fly:RemoveInstance('AlignAttachment')
-					end
-				end
-			end
+			Restart = true
 		})
 		
 		MoveMethod = Fly:CreateDropdown({
 			Name = 'Move Method',
-			List = {'Camera', 'MoveDirection'},
-			Tooltip = 'Camera - Moves based off the orientation of your camera.\nMoveDirection - Moves based off the move direction of your Humanoid.'
+			List = {'MoveDirection', 'Camera'},
+			Tooltip = 'MoveDirection - Moves based off the move direction of your Humanoid.\nCamera - Moves based off the orientation of your camera.',
 		})
 
 		PlatformStand = Fly:CreateToggle({

@@ -20,7 +20,7 @@ GetTextBoundsParams.Width = math.huge
 local TextGUI, Components, ModulesTopBar, ThemesDropdown
 local PrevMenu, HudMenu, GuiMenu, ConfigMenu, FriendsMenu, MenuOptions, ProfilesMenu
 local Gui, Tooltip, TopBar, GuiScale, Modal
-local NotificationHolder, HudFolder, CategoryHolder, MenuHolder, CurrentColorPicker, ColorPickerHidMenuOptions
+local NotificationHolder, HudFolder, CategoryHolder, MenuHolder, ColorPickerHolder, MobileButtonHolder, CurrentColorPicker, ColorPickerHidMenuOptions
 
 const Plr: Player = Players.LocalPlayer
 local Camera: Camera = cloneref(workspace.CurrentCamera or workspace:FindFirstChildOfClass('Camera') or Instance.new('Camera'))
@@ -104,6 +104,7 @@ const BuiltInThemes = {
 			ButtonHover = Color3.fromRGBT(40, 40, 40),
 			Tooltip = Color3.fromRGBT(0, 0, 0, 0.3),
 			Notification = Color3.fromRGBT(0, 0, 0, 0.2),
+			MobileButton = Color3.fromRGBT(0, 0, 0, 0.5)
 		},
 		Outline = {
 			Primary = Color3.fromRGBT(0, 0, 0),
@@ -153,6 +154,7 @@ local TidalWave = {
 	Profiles = {},
 	Friends = {},
 	PressedKeys = {},
+	ActiveKeybinds = {},
 	Menus = {},
 	Modules = {},
 	Buttons = {},
@@ -163,6 +165,7 @@ local TidalWave = {
 		Bold = Font.fromEnum(Enum.Font.GothamBold)
 	},
 	Themes = table.clone(BuiltInThemes),
+	FunctionsWaitingForSignalLibrary = {},
 	PlaceName = (function()
 		const Success, Result = pcall(function()
 			return MarketplaceService:GetProductInfoAsync(game.PlaceId)
@@ -1495,6 +1498,16 @@ end
 --#endregion Shared Functions
 
 function TidalWave:Init()
+	const function CreateHolder(Name, Parent, Visible)
+		const Holder = Instance.new('Frame')
+		Holder.Name = Name
+		Holder.BackgroundTransparency = 1
+		Holder.Size = UDim2.fromScale(1, 1)
+		Holder.Visible = if Visible then Visible else true
+		Holder.Parent = Parent
+		return Holder
+	end
+
 	AddMaid(TidalWave)
 	Gui = Instance.new('ScreenGui')
 	Gui.Name = `TidalWave v{self.Version}`
@@ -1505,47 +1518,25 @@ function TidalWave:Init()
 	pcall(function() Gui.OnTopOfCoreBlur = true end)
 	Gui.Parent = gethui()
 	self.Gui = Gui
-	
-	const ScaledGui = Instance.new('Frame')
-	ScaledGui.Name = 'ScaledGui'
-	ScaledGui.BackgroundTransparency = 1
-	ScaledGui.Size = UDim2.fromScale(1, 1)
-	ScaledGui.Parent = Gui
+
+	const ScaledGui = CreateHolder('ScaledGui', Gui)
 	
 	GuiScale = Instance.new('UIScale')
 	GuiScale.Scale = math.max(Gui.AbsoluteSize.X / 1920, 0.6)
 	GuiScale.Parent = ScaledGui
 	ScaledGui.Size = UDim2.fromScale(1 / GuiScale.Scale, 1 / GuiScale.Scale)
-	
-	HudFolder = Instance.new('Frame')
-	HudFolder.Name = 'Hud'
-	HudFolder.Size = UDim2.fromScale(1, 1)
-	HudFolder.BackgroundTransparency = 1
-	HudFolder.Parent = ScaledGui
-	
-	const GuiFolder = Instance.new('Frame')
-	GuiFolder.Name = 'Gui'
-	GuiFolder.Size = UDim2.fromScale(1, 1)
-	GuiFolder.BackgroundTransparency = 1
-	GuiFolder.Parent = ScaledGui
-	
-	CategoryHolder = Instance.new('Frame')
-	CategoryHolder.Name = 'Categories'
-	CategoryHolder.Size = UDim2.fromScale(1, 1)
-	CategoryHolder.BackgroundTransparency = 1
-	CategoryHolder.Visible = false
-	CategoryHolder.Parent = GuiFolder
+
+	HudFolder = CreateHolder('Hud', ScaledGui)
+	const GuiFolder = CreateHolder('Gui', ScaledGui)
+	CategoryHolder = CreateHolder('Categories', GuiFolder, false)
+	MenuHolder = CreateHolder('Menus', GuiFolder)
+	ColorPickerHolder = CreateHolder('ColorPickers', GuiFolder)
+	MobileButtonHolder = CreateHolder('MobileButtons', Gui)
 	
 	const TopBarInsetPadding = Instance.new('UIPadding')
 	TopBarInsetPadding.PaddingTop = UDim.new(0, (GuiService.TopbarInset.Height + 2) / GuiScale.Scale)
 	TopBarInsetPadding.PaddingLeft = UDim.new(0, 8)
 	TopBarInsetPadding.Parent = CategoryHolder
-	
-	MenuHolder = Instance.new('Frame')
-	MenuHolder.Name = 'Menus'
-	MenuHolder.Size = UDim2.fromScale(1, 1)
-	MenuHolder.BackgroundTransparency = 1
-	MenuHolder.Parent = GuiFolder
 	
 	NotificationHolder  = Instance.new('TextButton')
 	NotificationHolder.Name = 'Notifications'
@@ -1572,15 +1563,15 @@ function TidalWave:Init()
 	Tooltip.Parent = GuiFolder
 	AddCorner(Tooltip, UDim.new(0, 5))
 	ListenObject(Tooltip, 'Background/Tooltip', 'Text/Primary')
-	ListenFont(Tooltip, 'Regular')
-	
-	const TooltipUIStroke = Instance.new('UIStroke')
-	TooltipUIStroke.Thickness = 1
-	TooltipUIStroke.Color = GetColor('Outline/Tooltip')
-	TooltipUIStroke.BorderStrokePosition = Enum.BorderStrokePosition.Inner
-	TooltipUIStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-	TooltipUIStroke.Parent = Tooltip
-	ListenObject(TooltipUIStroke, 'Outline/Tooltip')
+	ListenFont(Tooltip, 'Regular'); do
+		const TooltipOutline = Instance.new('UIStroke')
+		TooltipOutline.Thickness = 1
+		TooltipOutline.Color = GetColor('Outline/Tooltip')
+		TooltipOutline.BorderStrokePosition = Enum.BorderStrokePosition.Inner
+		TooltipOutline.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+		TooltipOutline.Parent = Tooltip
+		ListenObject(TooltipOutline, 'Outline/Tooltip')
+	end
 	
 	Modal = Instance.new('TextButton')
 	Modal.Name = 'Modal'
@@ -1601,16 +1592,21 @@ function TidalWave:Init()
 	TopBar.AnchorPoint = Vector2.new(0.5, 0)
 	TopBar.Visible = false
 	TopBar.Parent = GuiFolder
+	self.TopBar = TopBar
 	AddCorner(TopBar, UDim.new(0, 11))
-	ListenObject(TopBar, 'Background/Primary')
-	
-	const TopBarLayout = Instance.new('UIListLayout')
-	TopBarLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-	TopBarLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-	TopBarLayout.SortOrder = Enum.SortOrder.LayoutOrder
-	TopBarLayout.FillDirection = Enum.FillDirection.Horizontal
-	TopBarLayout.Padding = UDim.new(0, 8)
-	TopBarLayout.Parent = TopBar
+	ListenObject(TopBar, 'Background/Primary'); do
+		const TopBarLayout = Instance.new('UIListLayout')
+		TopBarLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+		TopBarLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+		TopBarLayout.SortOrder = Enum.SortOrder.LayoutOrder
+		TopBarLayout.FillDirection = Enum.FillDirection.Horizontal
+		TopBarLayout.Padding = UDim.new(0, 8)
+		TopBarLayout.Parent = TopBar
+
+		const SizeConstraint = Instance.new('UISizeConstraint')
+		SizeConstraint.MaxSize = Vector2.new(math.huge, 44)
+		SizeConstraint.Parent = TopBar
+	end
 	
 	const Cursor = Instance.new('ImageLabel')
 	Cursor.Name = 'Cursor'
@@ -1655,6 +1651,7 @@ function TidalWave:Init()
 	self:Clean(self.StopRGB, self)
 	
 	local StopEditingHudPositions, StartEditingHudPositions, AllowMouseBinding, MenuKeybind, DoneButton
+	local StartEditingMobilePositions, StopEditingMobilePositions, MobileDoneButton
 	
 	Run(function() -- Menus
 		const function HideMenus(Exclusion, Visible)
@@ -1698,7 +1695,7 @@ function TidalWave:Init()
 			MenuKeybind = ConfigMenu:CreateKeybind({
 				Name = 'Menu',
 				Keybind = 'RightShift',
-				Secondary = true
+				MobileButton = false
 			})
 
 			local KeepOnTeleport; KeepOnTeleport = ConfigMenu:CreateToggle({
@@ -1916,6 +1913,81 @@ function TidalWave:Init()
 					end
 				})
 			end)
+
+			if UIS.TouchEnabled then
+				MobileDoneButton = Instance.new('TextButton')
+				MobileDoneButton.Name = 'Done'
+				MobileDoneButton.Size = UDim2.fromOffset(200, 50)
+				MobileDoneButton.Position = UDim2.fromScale(0.5, 1)
+				MobileDoneButton.AnchorPoint = Vector2.new(0.5, 1)
+				MobileDoneButton.BackgroundColor3 = GetColor('Background/Button')
+				MobileDoneButton.BorderSizePixel = 0
+				MobileDoneButton.Text = 'Done'
+				MobileDoneButton.TextColor3 = GetColor('Text/Primary')
+				MobileDoneButton.TextSize = 36
+				MobileDoneButton.FontFace = GetFont('Regular')
+				MobileDoneButton.Visible = false
+				MobileDoneButton.Parent = GuiFolder
+				ListenObject(MobileDoneButton, 'Background/Button', 'Text/Primary')
+				ListenFont(MobileDoneButton, 'Regular')
+	
+				local Corner = Instance.new('UICorner')
+				Corner.CornerRadius = UDim.new(0, 0)
+				Corner.TopLeftRadius = UDim.new(0, 7)
+				Corner.TopRightRadius = UDim.new(0, 7)
+				Corner.Parent = MobileDoneButton
+	
+				local EditingPositions = false
+				local Objects = {}
+	
+				StopEditingMobilePositions = function()
+					if not EditingPositions then return end
+					EditingPositions = false
+	
+					for _, Obj in Objects do
+						Obj:Destroy()
+					end
+					table.clear(Objects)
+
+					MobileDoneButton.Visible = false
+					GuiMenu.Object.Visible = true
+				end
+	
+				StartEditingMobilePositions = function()
+					if not GuiMenu.Object.Visible then return end
+					EditingPositions = true
+					GuiMenu.Object.Visible = false
+					for _, Button in MobileButtonHolder:GetChildren() do
+						local DragDetector = Instance.new('UIDragDetector')
+						DragDetector.CursorIcon = 'rbxasset://textures/Cursors/KeyboardMouse/ArrowFarCursor.png'
+						DragDetector.ActivatedCursorIcon = 'rbxasset://textures/Cursors/KeyboardMouse/ArrowFarCursor.png'
+						DragDetector.BoundingUI = MobileButtonHolder
+						DragDetector.BoundingBehavior = Enum.UIDragDetectorBoundingBehavior.EntireObject
+						DragDetector.Parent = Button
+						
+						local Outline = Instance.new('UIStroke')
+						Outline.Color = Color3.White
+						Outline.Thickness = 2
+						Outline.BorderStrokePosition = Enum.BorderStrokePosition.Inner
+						Outline.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+						Outline.LineJoinMode = Enum.LineJoinMode.Round
+						Outline.ZIndex = 69420
+						Outline.Parent = Button
+
+						table.insert(Objects, DragDetector)
+						table.insert(Objects, Outline)
+					end
+	
+					MobileDoneButton.Visible = true
+				end
+	
+				MobileDoneButton.MouseButton1Click:Connect(StopEditingMobilePositions)
+	
+				GuiMenu:CreateButton({
+					Name = 'Edit Mobile Positions',
+					Function = StartEditingMobilePositions
+				})
+			end
 		end)
 	
 		Run(function() -- HUD
@@ -2898,9 +2970,9 @@ function TidalWave:Init()
 	end)
 	
 	Run(function() -- Input Handling
-		local MouseEnabledCon, UpdateCursorCon, HeldModule
+		local MouseEnabledCon, UpdateCursorCon
 	
-		local function OnMouseEnableChanged()
+		local function MouseEnabledChanged()
 			if UIS.MouseIconEnabled then
 				if UpdateCursorCon then
 					UpdateCursorCon:Disconnect()
@@ -2930,20 +3002,8 @@ function TidalWave:Init()
 	
 		local function StartCursorCon()
 			StopCursorCon()
-			OnMouseEnableChanged()
-			MouseEnabledCon = UIS:GetPropertyChangedSignal('MouseEnabled'):Connect(OnMouseEnableChanged)
-		end
-	
-		local function CheckKeybind(Keybind, LatestInput)
-			if Keybind == 'None' then return false end
-			if Keybind:match(LatestInput) then
-				for _, v in Keybind:split('+') do
-					if not TidalWave.PressedKeys[v] then return false end
-				end
-				return true
-			end
-	
-			return false
+			MouseEnabledChanged()
+			MouseEnabledCon = UIS:GetPropertyChangedSignal('MouseEnabled'):Connect(MouseEnabledChanged)
 		end
 	
 		TidalWave:Clean(StopCursorCon)
@@ -2963,7 +3023,79 @@ function TidalWave:Init()
 			end
 			return String
 		end
-	
+
+		const function MenuKeybindPressed()
+			if MenuOptions.Object.Visible then
+				MenuOptions.Object.Visible = false
+				for i, v in TidalWave.Menus do
+					if i == PrevMenu then
+						v:Show()
+						break
+					end
+				end
+				return
+			end
+
+			if CurrentColorPicker then
+				CurrentColorPicker.Visible = false
+				CurrentColorPicker = nil
+				if ColorPickerHidMenuOptions then
+					MenuOptions.Object.Visible = true
+				else
+					for i, v in TidalWave.Menus do
+						if i == PrevMenu then
+							v:Show()
+							break
+						end
+					end
+				end
+				return
+			end
+
+			local Menu
+			for _, v in TidalWave.Menus do
+				if v.Object.Visible then
+					Menu = v
+				end
+			end
+			
+			if Menu then
+				ModulesTopBar:Select()
+				return
+			end
+
+			if DoneButton.Visible then
+				StopEditingHudPositions()
+				return
+			end
+
+			if MobileDoneButton and MobileDoneButton.Visible then
+				StopEditingMobilePositions()
+				return
+			end
+
+			TopBar.Visible = not CategoryHolder.Visible
+			if not TidalWave.CategoryAnimations then
+				CategoryHolder.Visible = not CategoryHolder.Visible
+			end
+
+			if CategoryHolder.Visible then
+				Tooltip.Visible = false
+				StopCursorCon()
+			else
+				StartCursorCon()
+			end
+
+			for _, Category in TidalWave.Categories do
+				Category:Toggle()
+			end
+
+			if not CategoryHolder.Visible and TidalWave.CategoryAnimations then
+				CategoryHolder.Visible = true
+				Modal.Visible = true
+			end
+		end
+
 		TidalWave:Clean(UIS.InputBegan:Connect(function(Input)
 			if UIS:GetFocusedTextBox() then return end
 			if TidalWave.Binding and ((Input.KeyCode == Enum.KeyCode.None and not AllowMouseBinding.Enabled) or Input.KeyCode == Enum.KeyCode.Escape) then
@@ -2975,92 +3107,11 @@ function TidalWave:Init()
 				if TidalWave.Binding then
 					TidalWave.Binding:SetKeybind(Concat(TidalWave.PressedKeys, '+'))
 				else
-					if MenuKeybind:Check(Input) then
-						if MenuOptions.Object.Visible then
-							MenuOptions.Object.Visible = false
-							for i, v in TidalWave.Menus do
-								if i == PrevMenu then
-									v:Show()
-									break
-								end
-							end
-							return
-						end
+					if TopBar.Visible and UserInputTypes[Key] then return end
 
-						if CurrentColorPicker then
-							CurrentColorPicker.Visible = false
-							CurrentColorPicker = nil
-							if ColorPickerHidMenuOptions then
-								MenuOptions.Object.Visible = true
-							else
-								for i, v in TidalWave.Menus do
-									if i == PrevMenu then
-										v:Show()
-										break
-									end
-								end
-							end
-							return
-						end
-	
-						local Menu
-						for _, v in TidalWave.Menus do
-							if v.Object.Visible then
-								Menu = v
-							end
-						end
-						
-						if Menu then
-							ModulesTopBar:Select()
-							return
-						end
-	
-						if DoneButton.Visible then
-							StopEditingHudPositions()
-							return
-						end
-	
-						TopBar.Visible = not CategoryHolder.Visible
-						if not TidalWave.CategoryAnimations then
-							CategoryHolder.Visible = not CategoryHolder.Visible
-						end
-	
-						if CategoryHolder.Visible then
-							Tooltip.Visible = false
-							StopCursorCon()
-						else
-							StartCursorCon()
-						end
-	
-						for _, Category in TidalWave.Categories do
-							Category:Toggle()
-						end
-	
-						if not CategoryHolder.Visible and TidalWave.CategoryAnimations then
-							CategoryHolder.Visible = true
-							Modal.Visible = true
-						end
-					else
-						if TopBar.Visible and UserInputTypes[Key] then return end
-
-						for _, Module in TidalWave.Modules do
-							const Keybind = Module.Keybinds.Toggle
-							if CheckKeybind(Keybind.Keybind, Key) then
-								if Keybind.Hold then
-									HeldModule = Module
-									if not Module.Enabled then
-										Module:Toggle()
-									end
-								else
-									Module:Toggle()
-								end
-							end
-						end
-
-						for _, Button in TidalWave.Buttons do
-							if CheckKeybind(Button.Keybinds.Toggle.Keybind, Key) then
-								Button:Toggle()
-							end
+					for _, Keybind in TidalWave.ActiveKeybinds do
+						if Keybind:Check(Input) then
+							Keybind.Triggered:Fire(true)
 						end
 					end
 				end
@@ -3074,13 +3125,31 @@ function TidalWave:Init()
 			if TidalWave.Binding then
 				TidalWave.Binding = nil
 				table.clear(TidalWave.PressedKeys)
-			elseif HeldModule and HeldModule.Keybinds.Toggle.Keybind:match(Key) then
-				if HeldModule.Enabled then
-					HeldModule:Toggle()
+			else
+				for _, Keybind in TidalWave.ActiveKeybinds do
+					if Keybind:Check(Input) then
+						Keybind.Triggered:Fire(false)
+					end
 				end
-				HeldModule = nil
 			end
 		end))
+
+		table.insert(self.FunctionsWaitingForSignalLibrary, function()
+			self:Clean(MenuKeybind.Triggered:Connect(function(Pressed)
+				if (UIS.TouchEnabled and not Pressed) or (not UIS.TouchEnabled and Pressed) then
+					MenuKeybindPressed()
+				end
+			end))
+		end)
+
+		if UIS.TouchEnabled then
+			Components.Other.MobileButton({
+				Name = '🌊',
+				Size = UDim2.fromOffset(32, 32),
+				Position = UDim2.new(1, -90, 0, 24),
+				Released = MenuKeybindPressed
+			})
+		end
 	end)
 	
 	Run(function() -- Categories
@@ -3247,17 +3316,18 @@ end
 Components = {
 	Category = {
 		Module = function(Properties)
+			const Name = Properties.Name
+			const SubbedName = Name:gsub(' ', '')
+
 			const Module = {
 				Enabled = false,
 				Keybind = 'None',
 				ExtraText = Properties.ExtraText,
 				Category = Properties.Category,
+				Name = Name,
 				Options = {},
 				Keybinds = {}
 			}
-
-			const Name = Properties.Name
-			const SubbedName = Name:gsub(' ', '')
 		
 			const Button = Instance.new('TextButton')
 			Button.Name = `{SubbedName}Module`
@@ -3276,7 +3346,7 @@ Components = {
 			AddHighlight(Button, nil, true)
 			AddMaid(Module)
 			AddInstanceTable(Module)
-			ListenObject(Button, 'Background/Button', nil, function()
+			ListenObject(Button, 'Background/Button', 'Background/ButtonHover', function()
 				Button.BackgroundColor3 = (SearchMatches[Button] or Button.GuiState == Enum.GuiState.Hover) and GetColor('Background/ButtonHover') or GetColor('Background/Button')
 			end)
 			ListenObject(Button, 'Text/ModuleEnabled', 'Text/Primary', function()
@@ -3305,13 +3375,28 @@ Components = {
 				UpdateCategoryPositions()
 			end
 
-			Components.Options.Keybind({
+			const Keybind = Components.Options.Keybind({
 				Name = 'Toggle',
 				Text = 'Keybind',
 				UseHold = true,
 				Module = Module,
-				Parent = TidalWave.Menus.Options.Children
+				IsModuleKeybind = true,
+				Parent = TidalWave.Menus.Options.Children,
 			})
+			
+			Keybind.Triggered:Connect(function(Pressed)
+				if Keybind.Hold then
+					if Pressed then
+						Module:Enable()
+					else
+						Module:Disable()
+					end
+				else
+					if (UIS.TouchEnabled and not Pressed) or (not UIS.TouchEnabled and Pressed) then
+						Module:Toggle()
+					end
+				end
+			end)
 		
 			function Module:Toggle(NoNotify)
 				self.Enabled = not self.Enabled
@@ -3323,6 +3408,10 @@ Components = {
 						Text = `{Name} has been <font color = '#{Color}'>{ToggledString}</font>`,
 						Duration = TidalWave.ModuleToggledNotificationDuration,
 					})
+				end
+
+				if Keybind.MobileButton then
+					Keybind.MobileButton.BackgroundColor3 = self.Enabled and GetColor('Text/ModuleEnabled') or GetColor('Background/MobileButton')
 				end
 		
 				Button.TextColor3 = self.Enabled and GetColor('Text/ModuleEnabled') or GetColor('Text/Primary')
@@ -3386,12 +3475,8 @@ Components = {
 			function Module:UpdateTextGUI()
 				TextGUI:UpdateExtraText(Name)
 			end
-			
-			Button.MouseButton1Click:Connect(function()
-				Module:Toggle()
-			end)
-			
-			Button.MouseButton2Click:Connect(function()
+
+			const function OpenOptions()
 				Tooltip.Visible = false
 				CategoryHolder.Visible = false
 				TidalWave.Menus.Options:HideChildren()
@@ -3403,7 +3488,16 @@ Components = {
 				end
 				TidalWave.Menus.Options.Object.Title.Text = Name
 				TidalWave.Menus.Options:Show()
+			end
+			
+			Button.MouseButton1Click:Connect(function()
+				Module:Toggle()
 			end)
+			
+			Button.MouseButton2Click:Connect(OpenOptions)
+			if UIS.TouchEnabled then
+				Button.TouchLongPress:Connect(OpenOptions)
+			end
 			
 			Module.Object = Button
 		
@@ -3485,8 +3579,8 @@ Components = {
 			if Properties.Function then
 				ButtonObject.MouseButton1Click:Connect(Properties.Function)
 			end
-		
-			ButtonObject.MouseButton2Click:Connect(function()
+
+			const function OpenOptions()
 				Tooltip.Visible = false
 				CategoryHolder.Visible = false
 				TidalWave.Menus.Options:HideChildren()
@@ -3501,7 +3595,12 @@ Components = {
 
 				TidalWave.Menus.Options.Object.Title.Text = Name
 				TidalWave.Menus.Options:Show()
-			end)
+			end
+		
+			ButtonObject.MouseButton2Click:Connect(OpenOptions)
+			if UIS.TouchEnabled then
+				ButtonObject.TouchLongPress:Connect(OpenOptions)
+			end
 		
 			Button.Object = ButtonObject
 		
@@ -3716,7 +3815,7 @@ Components = {
 			PickerMenu.Text = ''
 			PickerMenu.AutoButtonColor = false
 			PickerMenu.Visible = false
-			PickerMenu.Parent = MenuHolder
+			PickerMenu.Parent = ColorPickerHolder
 			ListenObject(PickerMenu, 'Main/Accent')
 
 			const PickerMenuCorner = Instance.new('UICorner')
@@ -5523,6 +5622,10 @@ Components = {
 					end
 			
 					Button.MouseButton2Click:Connect(Select)
+
+					if UIS.TouchEnabled then
+						Button.TouchLongPress:Connect(Select)
+					end
 				end
 			
 				Button.MouseButton1Click:Connect(function()
@@ -5727,8 +5830,19 @@ Components = {
 			local Keybind = {
 				Keybind = Properties.Keybind or 'None',
 				Hold = if Properties.UseHold ~= nil then Properties.Hold or false else nil,
-				Visible = if Properties.Visible ~= nil then Properties.Visible else true
+				Visible = if Properties.Visible ~= nil then Properties.Visible else true,
+				Triggered = {Fire = function() end},
 			}
+
+			const function InitSignals()
+				Keybind.Triggered = TidalWave.Libraries.Signal.new()
+			end
+
+			if TidalWave.Libraries and TidalWave.Libraries.Signal then
+				InitSignals()
+			else
+				table.insert(TidalWave.FunctionsWaitingForSignalLibrary, InitSignals)
+			end
 			
 			local MainFrame = Instance.new('Frame')
 			MainFrame.Name = `{Properties.Name}Keybind`
@@ -5769,7 +5883,7 @@ Components = {
 			BindButton.TextColor3 = GetColor('Text/Primary')
 			BindButton.TextSize = 24
 			BindButton.FontFace = GetFont('Regular')
-			BindButton.Text = Properties.Keybind or 'None'
+			BindButton.Text = Properties.MobileButton == false and 'Added' or (UIS.TouchEnabled and 'Tap to add' or (Properties.Keybind or 'None'))
 			BindButton.AutoButtonColor = false
 			BindButton.Parent = Background
 			AddCorner(BindButton, UDim.new(0, 7))
@@ -5818,23 +5932,70 @@ Components = {
 			end
 			
 			BindButton.MouseButton1Click:Connect(function()
-				if TidalWave.Binding then
-					TidalWave.Binding = nil
-					BindButton.Text = Keybind.Keybind or 'None'
+				if UIS.TouchEnabled then
+					BindButton.Text = 'Added'
+					Keybind:CreateMobileButton()
 				else
-					BindButton.Text = 'Press Key'
-					task.wait()
-					TidalWave.Binding = Keybind
+					if TidalWave.Binding then
+						TidalWave.Binding = nil
+						BindButton.Text = Keybind.Keybind or 'None'
+					else
+						BindButton.Text = 'Press Key'
+						task.wait()
+						TidalWave.Binding = Keybind
+					end
 				end
 			end)
+
+			function Keybind:CreateMobileButton(Position)
+				self:RemoveMobileButton()
+				if Properties.MobileButton == false then return end
+				self.MobileButton = Components.Other.MobileButton({
+					Name = Properties.IsModuleKeybind and Properties.Module.Name or Properties.Name,
+					Position = Position,
+					Pressed = function()
+						self.Triggered:Fire(true)
+					end,
+					Released = function()
+						self.Triggered:Fire(false)
+					end
+				})
+
+				if Properties.IsModuleKeybind then
+					self.MobileButton.BackgroundColor3 = Properties.Module.Enabled and GetColor('Text/ModuleEnabled') or GetColor('Background/MobileButton')
+				end
+			end
+
+			function Keybind:RemoveMobileButton()
+				if self.MobileButton then
+					self.MobileButton:Destroy()
+					self.MobileButton = nil
+				end
+			end
+
+			function Keybind:UpdateActiveKeybind()
+				if self.Keybind ~= 'None' then
+					if not table.find(TidalWave.ActiveKeybinds, self) then
+						table.insert(TidalWave.ActiveKeybinds, self)
+					end
+				else
+					local Index = table.find(TidalWave.ActiveKeybinds, self)
+					if Index then
+						table.remove(TidalWave.ActiveKeybinds, Index)
+					end
+				end
+			end
 			
 			function Keybind:SetKeybind(Bind)
 				self.Keybind = Bind or 'None'
-				BindButton.Text = self.Keybind
+				BindButton.Text = Properties.MobileButton == false and 'Added' or (UIS.TouchEnabled and 'Tap to add' or (self.Keybind or 'None'))
+				self:UpdateActiveKeybind()
+
 				if Properties.Function then
 					Properties.Function(self.Keybind)
 				end
 			end
+			Keybind:UpdateActiveKeybind()
 			
 			function Keybind:ToggleHold()
 				if self.Hold ~= nil and EnabledBar then
@@ -5843,16 +6004,13 @@ Components = {
 				end
 			end
 			
-			local UserInputTypes = {
+			const UserInputTypes = {
 				['MouseButton1'] = true,
 				['MouseButton2'] = true,
 				['MouseButton3'] = true,
 			}
 			
-			local SecondaryKeybind
-			
 			function Keybind:IsPressed()
-				if SecondaryKeybind and SecondaryKeybind:IsPressed() then return true end
 				if self.Keybind == 'None' then return false end
 				for _, v in self.Keybind:split('+') do
 					local Key = (UserInputTypes[v] and (not TopBar.Visible and Enum.UserInputType[v].Name or '') or nil) or Enum.KeyCode[v].Name
@@ -5863,7 +6021,6 @@ Components = {
 			end
 			
 			function Keybind:Check(Input)
-				if SecondaryKeybind and SecondaryKeybind:Check(Input) then return true end
 				if self.Keybind == 'None' then return false end
 				if Input.KeyCode == Enum.KeyCode.None and not UserInputTypes[Input.UserInputType.Name] then return false end
 				local Split = self.Keybind:split('+')
@@ -5887,39 +6044,43 @@ Components = {
 			
 			local Name = Properties.Name:gsub(' ', '')
 			
-			function Keybind:Save(Tab)
-				Tab[Name] = {
+			function Keybind:Save(Data)
+				Data[Name] = {
 					Keybind = self.Keybind,
-					Hold = self.Hold
+					Hold = self.Hold,
+					Mobile = self.MobileButton and {
+						X = self.MobileButton.Position.X.Offset,
+						Y = self.MobileButton.Position.Y.Offset
+					}
 				}
 			end
 			
-			function Keybind:Load(Tab)
-				if self.Keybind ~= Tab.Keybind then
-					self:SetKeybind(Tab.Keybind)
+			function Keybind:Load(Data)
+				if self.Keybind ~= Data.Keybind then
+					self:SetKeybind(Data.Keybind)
 				end
-				if self.Hold ~= nil and Tab.Hold ~= nil and self.Hold ~= Tab.Hold then
+				if self.Hold ~= nil and Data.Hold ~= nil and self.Hold ~= Data.Hold then
 					self:ToggleHold()
+				end
+				if Data.Mobile and Data.Mobile.X and Data.Mobile.Y then
+					self:CreateMobileButton(UDim2.fromOffset(Data.Mobile.X, Data.Mobile.Y))
 				end
 			end
 			
 			Components.Options.Delete({
 				Parent = MainFrame,
 				Function = function()
-					Keybind:SetKeybind('None')
+					if UIS.TouchEnabled then
+						Keybind:RemoveMobileButton()
+						BindButton.Text = 'Tap to add'
+					else
+						Keybind:SetKeybind('None')
+					end
 				end
 			})
 			
 			Keybind.Object = MainFrame
 			Properties.Module.Keybinds[Name] = Keybind
-			
-			if Properties.Secondary or Properties.SecondaryKeybind then
-				Properties.Text = `{Properties.Name} Keybind 2`
-				Properties.Name ..= '2'
-				Properties.Secondary = nil
-				Properties.Keybind = Properties.SecondaryKeybind
-				SecondaryKeybind = Components.Options.Keybind(Properties)
-			end
 			
 			return Keybind
 		end,
@@ -6134,7 +6295,7 @@ Components = {
 			DragDetector.Parent = Handle
 			
 			const function FrameDragged(Type)
-				local Pos, Value = CalculatePosition(Type or 'Mouse')
+				local Pos, Value = CalculatePosition(typeof(Type) == 'string' and Type or 'Mouse')
 				Handle.Position = UDim2.new(0, Pos, 0, -7)
 				LeftBar.Size = UDim2.fromOffset(Pos, 3)
 				RightBar.Size = UDim2.fromOffset(SliderFrame.Size.X.Offset - Pos, 3)
@@ -7252,8 +7413,8 @@ Components = {
 				Toggle.Options = {}
 				Toggle.Buttons = {}
 				Toggle.Keybinds = {}
-			
-				Toggle.Object.Button.MouseButton2Click:Connect(function()
+
+				const function ShowOptions()
 					MenuOptions.Object.Title.Text = Properties.Name
 					for i, v in TidalWave.Menus do
 						v.Object.Visible = i == 'MenuOptions'
@@ -7283,7 +7444,12 @@ Components = {
 					for i, v in Toggle.Buttons do
 						v.Object.Visible = v.Visible
 					end
-				end)
+				end
+				
+				Toggle.Object.Button.MouseButton2Click:Connect(ShowOptions)
+				if UIS.TouchEnabled then
+					Toggle.Object.Button.TouchLongPress:Connect(ShowOptions)
+				end
 			
 				local Name = Properties.Name:gsub(' ', '')
 			
@@ -8881,6 +9047,9 @@ Components = {
 					end
 			
 					Button.MouseButton2Click:Connect(Select)
+					if UIS.TouchEnabled then
+						Button.TouchLongPress:Connect(Select)
+					end
 				end
 			
 				Button.MouseButton1Click:Connect(function()
@@ -8994,6 +9163,65 @@ Components = {
 			
 			return Dropdown
 		end,
+		MobileButton = function(Properties)
+			local Button = Instance.new('TextButton')
+			Button.BackgroundColor3, Button.BackgroundTransparency = GetColor('Background/MobileButton')
+			Button.BorderSizePixel = 0
+			Button.Size = Properties.Size or UDim2.fromOffset(40, 40)
+			Button.Position = Properties.Position or UDim2.fromOffset(5, GuiService.TopbarInset.Height)
+			Button.Text = Properties.Name or ''
+			Button.TextColor3 = GetColor('Text/Primary')
+			Button.FontFace = GetFont('Regular')
+			Button.TextScaled = true
+			ListenObject(Button, 'Text/Primary', 'Background/MobileButton')
+			ListenFont(Button, 'Regular')
+			AddCorner(Button, UDim.new(1, 0))
+			
+			if Properties.Image then
+				local Image = Instance.new('ImageLabel')
+				Image.BackgroundTransparency = 1
+				Image.Size = Button.Size - UDim2.fromOffset(8, 8)
+				Image.Position = UDim2.fromOffset(4, 4)
+				Image.Image = Properties.Image
+				Image.Parent = Button
+			else
+				local TextSizeConstraint = Instance.new('UITextSizeConstraint')
+				TextSizeConstraint.MaxTextSize = 16
+				TextSizeConstraint.Parent = Button
+			end
+
+			Button.Parent = MobileButtonHolder
+
+			if Properties.Function then
+				Button.MouseButton1Click:Connect(Properties.Function)
+			end
+
+			local Pressed = false
+			Button.MouseButton1Down:Connect(function()
+				Pressed = true
+				if Properties.Pressed then
+					Properties.Pressed()
+				end
+			end)
+
+			if Properties.Released then
+				Button.MouseButton1Up:Connect(function()
+					if Pressed then
+						Pressed = false
+						Properties.Released()
+					end
+				end)
+
+				Button.MouseLeave:Connect(function()
+					if Pressed then
+						Pressed = false
+						Properties.Released()
+					end
+				end)
+			end
+
+			return Button
+		end
 	},
 }
 
