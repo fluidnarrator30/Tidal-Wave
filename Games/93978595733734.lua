@@ -33,6 +33,17 @@ Color3.Yellow = Color3.new(1, 1, 0)
 Color3.Cyan = Color3.new(0, 1, 1)
 Color3.Pink = Color3.new(1, 0, 1)
 
+const vector = table.clone(vector)
+vector.xAxis = vector.create(1, 0, 0)
+vector.yAxis = vector.create(0, 1, 0)
+vector.zAxis = vector.create(0, 0, 1)
+vector.hort = vector.create(1, 0, 1)
+vector.huge = vector.create(math.huge, math.huge, math.huge)
+vector.hugeX = vector.create(math.huge, 0, 0)
+vector.hugeY = vector.create(0, math.huge, 0)
+vector.hugeZ = vector.create(0, 0, math.huge)
+vector.hugeXZ = vector.create(math.huge, 0, math.huge)
+
 const function Run(f)
 	f()
 end
@@ -45,30 +56,39 @@ const function Notify(Properties)
 	TidalWave:Notify(Properties)
 end
 
-for i, v in {'KillAura', 'Reach', 'HitboxExpander', 'Viewmodel', 'SilentAim', 'Swim'} do
+for i, v in {'KillAura', 'Reach', 'HitboxExpander', 'Viewmodel', 'SilentAim', 'Swim', 'AutoClicker', 'TriggerBot', 'Drop Tools', 'VehiclePhase', 'Aimbot'} do
 	TidalWave:RemoveModule(v)
 end
 
-local vd, AddCheckConditionsHook, RemoveCheckConditionHook
+local vd = {}
+local AddCheckConditionsHook, RemoveCheckConditionHook
 local Map, Remotes
 
 Run(function()
 	local Modules
-	local Survivor_Modules
+	local SurvivorModules
+	local KillerModules
 
-	repeat
+	const InitSuccess = TidalWave:WaitForInit(function()
 		Map = workspace:FindFirstChild('Map')
 		Modules = ReplicatedStorage:FindFirstChild('Modules')
-		Survivor_Modules = Modules and Modules:FindFirstChild('Survivors')
+		SurvivorModules = Modules and Modules:FindFirstChild('Survivors')
+		KillerModules = Modules and Modules:FindFirstChild('Killers')
 		Remotes = ReplicatedStorage:FindFirstChild('Remotes')
-	until (Map and Modules and Remotes)
+		return Map and Modules and SurvivorModules and KillerModules and Remotes
+	end)
+	if not InitSuccess then return end
 
 	vd = {
 		Survivor = {
-			Actions = require(Survivor_Modules.SurvivorActions),
-			AnimationsController = require(Survivor_Modules.SurvivorAnimationsController),
-			Config = require(Survivor_Modules.SurvivorConfig)
+			Actions = require(SurvivorModules.SurvivorActions),
+			AnimationsController = require(SurvivorModules.SurvivorAnimationsController),
+			Config = require(SurvivorModules.SurvivorConfig),
+			Vault = require(SurvivorModules.SurvivorVault)
 		},
+		Killer = {
+			Config = require(KillerModules.KillerConfig)
+		}
 	}
 
 	local CheckConditionHooks = {}
@@ -136,7 +156,7 @@ end)
 
 Run(function() -- Player
 	Run(function() -- FastVaultModifier
-		local FastVaultModifier, AnyAngle, AnySpeed, FinesseVault
+		local FastVaultModifier, AnyAngle, AnySpeed, AntiBlock, FinesseVault
 
 		const function LocalAdded()
 			EntityLib.Character:SetAttribute('Flowstate', true)
@@ -150,25 +170,140 @@ Run(function() -- Player
 			end))
 		end
 
+		const function CheckRun(Samples, Index, WindowLookVector, AllowedSpeed, MaxDistance)
+			local Distance = 0
+			local ClosestSample = Samples[Index]
+		
+			for i = Index - 1, 1, -1 do
+				local CurrentSample = Samples[i]
+				local SecondSample = Samples[i + 1]
+				local TimeDiff = SecondSample.t - CurrentSample.t
+				local Magnitude = vector.magnitude((SecondSample.pos - CurrentSample.pos) * vector.hort)
+		
+				if TimeDiff <= 0 or TimeDiff > 0.15 or AllowedSpeed * TimeDiff + 0.1 < Magnitude then
+					return false, 'stale', Distance
+				end
+		
+				local IsFacingFirst = false
+		
+				if CurrentSample.facing then
+					const LookDirection = vector.normalize(CurrentSample.facing * vector.hort)
+					IsFacingFirst = vector.dot(LookDirection, WindowLookVector) + 0.0001 >= vd.Survivor.Vault.DOT
+				end
+		
+				if IsFacingFirst then
+					const LookDirection = vector.normalize(SecondSample.facing * vector.hort)
+					local IsFacingSecond = vector.dot(LookDirection, WindowLookVector) + 0.0001 >= vd.Survivor.Vault.DOT
+					if not IsFacingSecond then
+						return false, 'facing', Distance
+					end
+				end
+				
+				local Diff = (ClosestSample.pos - CurrentSample.pos) * vector.hort
+				TimeDiff = ClosestSample.t - CurrentSample.t
+				local DiffMagnitude = vector.magnitude(Diff)
+		
+				if TimeDiff >= 0.075 or MaxDistance <= DiffMagnitude then
+					if vector.magnitude(Diff) / TimeDiff < vd.Survivor.Vault.MIN_SPEED then
+						return false, 'pace', Distance
+					end
+		
+					if MaxDistance <= DiffMagnitude then
+						return true, 'ready', DiffMagnitude
+					end
+		
+					Distance = DiffMagnitude
+					ClosestSample = CurrentSample
+				end
+			end
+		
+			return false, 'distance', Distance
+		end
+
 		FastVaultModifier = PlayerCategory:CreateModule({
 			Name = 'FastVaultModifier',
-			Info = 'Modifies various behaviors of fast vaults',
+			Info = 'Modifies the behavior of fast vaults',
 			Enabled = function()
-				if AnyAngle.Enabled then
-					local Old = vd.Survivor.AnimationsController._isFacingStraightEnough
-					vd.Survivor.AnimationsController._isFacingStraightEnough = function(self, Part1, Part2, Angle)
-						return true
+				local Old = vd.Survivor.Vault.evaluate
+				vd.Survivor.Vault.evaluate = function(Samples, Args)
+					if Args.blocked and not AntiBlock.Enabled then
+						return false, 'locked'
 					end
 
-					FastVaultModifier:Clean(function()
-						vd.Survivor.AnimationsController._isFacingStraightEnough = Old
-					end)
+					if not Args.sprinting then
+						return false, 'walking'
+					end
+
+					if not AnySpeed.Enabled then
+						if Args.allowedSpeed < 15.3 then
+							return false, 'slowed'
+						elseif vector.magnitude(Args.intent * vector.hort) < 0.05 then
+							return false, 'input'
+						end
+					end
+
+					if AnyAngle.Enabled then
+						return true, 'arrival', 0
+					end
+				
+					const WindowLookVector = vector.normalize(Args.axis * vector.hort)
+					const LocalDirection = vector.normalize(Args.facing * vector.hort)
+				
+					if not vector.dot(LocalDirection, WindowLookVector) + 0.0001 >= vd.Survivor.Vault.DOT then
+						return false, 'facing'
+					end
+				
+					local Len = #Samples
+					if Len < 2 then
+						return false, 'samples'
+					end
+				
+					if Args.now - Samples[Len].t > 0.15 then
+						return false, 'stale'
+					end
+				
+					local SamplesClone = table.clone(Samples)
+					if Args.now > SamplesClone[Len].t then
+						SamplesClone[Len + 1] = {
+							t = Args.now,
+							pos = Args.position,
+							facing = Args.facing
+						}
+					end
+				
+					local AllowedSpeed = math.max(Args.allowedSpeed, 17) * 1.75
+					local REPEAT_DISTANCE = Args.repeatingWindow == true and vd.Survivor.Vault.REPEAT_DISTANCE or vd.Survivor.Vault.DISTANCE
+					local Facing, Reason, Distance = CheckRun(SamplesClone, #SamplesClone, WindowLookVector, AllowedSpeed, REPEAT_DISTANCE)
+				
+					if Facing then
+						return Facing, Reason, Distance
+					end
+				
+					if Reason ~= 'stale' then
+						const HortVel = Args.velocity * vector.hort
+				
+						if vector.magnitude((Args.position - Args.entryPosition) * vector.hort) <= 4 and vector.magnitude(HortVel) < vd.Survivor.Vault.MIN_SPEED and Reason ~= 'facing' then
+							for i = #SamplesClone - 1, 2, -1 do
+								if Args.now - SamplesClone[i].t > vd.Survivor.Vault.ARRIVE_GRACE then
+									break
+								end
+				
+								Facing, _, Distance = CheckRun(SamplesClone, i, WindowLookVector, AllowedSpeed, REPEAT_DISTANCE)
+				
+								if Facing then
+									return true, 'arrival', Distance
+								end
+							end
+						end
+					end
+				
+					return false, Reason, Distance
 				end
 
-				if AnySpeed.Enabled then
-					debug.setconstant(vd.Survivor.AnimationsController._onVaultAnimation, 51, -1)
-					FastVaultModifier:Clean(debug.setconstant, vd.Survivor.AnimationsController._onVaultAnimation, 51, 15.25)
-				end
+				FastVaultModifier:Clean(function()
+					vd.Survivor.Vault.evaluate = Old
+					Old = nil
+				end)
 
 				if FinesseVault.Enabled then
 					FastVaultModifier:Clean(EntityLib.Events.LocalAdded:Connect(LocalAdded))
@@ -182,22 +317,119 @@ Run(function() -- Player
 
 		AnyAngle = FastVaultModifier:CreateToggle({
 			Name = 'Any Angle',
-			Info = 'Allows any angle for fast vaults.',
+			Tooltip = 'Allows you to get fast vaults from any angle.',
 			Default = true,
 			Restart = true
 		})
 
 		AnySpeed = FastVaultModifier:CreateToggle({
 			Name = 'Any Speed',
-			Info = 'Allows any speed speed for fast vaults.',
+			Tooltip = 'Allows you to get fast vaults at any speed, even while standing still.',
+			Default = true,
+			Restart = true
+		})
+
+		AntiBlock = FastVaultModifier:CreateToggle({
+			Name = 'AntiBlock',
+			Tooltip = 'Prevents windows from getting blocked',
 			Default = true,
 			Restart = true
 		})
 
 		FinesseVault = FastVaultModifier:CreateToggle({
 			Name = 'Finesse Vault',
-			Info = 'Plays a faster vault animation',
+			Tooltip = 'Plays a faster vault animation',
 			Restart = true
+		})
+	end)
+
+	Run(function() -- PalletBreakSpeed
+		local PalletBreakSpeed, Duration
+
+		PalletBreakSpeed = PlayerCategory:CreateModule({
+			Name = 'PalletBreakSpeed',
+			Tooltip = 'Modifies how fast you break pallets',
+			Function = function(Enabled)
+				if Enabled then
+					vd.Killer.Config.PALLET_BREAK_DURATION = Duration.Value
+				else
+					vd.Killer.Config.PALLET_BREAK_DURATION = 2.16
+				end
+			end
+		})
+
+		Duration = PalletBreakSpeed:CreateSlider({
+			Name = 'Duration',
+			Default = 2.16,
+			Min = 0.01,
+			Max = 5,
+			Decimal = 100,
+			Clamp = {0.01, 100},
+			Function = function(Val)
+				if PalletBreakSpeed.Enabled then
+					vd.Killer.Config.PALLET_BREAK_DURATION = Val
+				end
+			end
+		})
+	end)
+
+	Run(function() -- GeneratorBreakSpeed
+		local GeneratorBreakSpeed, Duration
+
+		GeneratorBreakSpeed = PlayerCategory:CreateModule({
+			Name = 'GeneratorBreakSpeed',
+			Tooltip = 'Modifies how fast you break generators',
+			Function = function(Enabled)
+				if Enabled then
+					vd.Killer.Config.GEN_BREAK_DURATION = Duration.Value
+				else
+					vd.Killer.Config.GEN_BREAK_DURATION = 1.9
+				end
+			end
+		})
+
+		Duration = GeneratorBreakSpeed:CreateSlider({
+			Name = 'Duration',
+			Default = 1.9,
+			Min = 0.01,
+			Max = 5,
+			Decimal = 100,
+			Clamp = {0.01, 100},
+			Function = function(Val)
+				if GeneratorBreakSpeed.Enabled then
+					vd.Killer.Config.GEN_BREAK_DURATION = Val
+				end
+			end
+		})
+	end)
+
+	Run(function() -- KillerVaultSpeed
+		local KillerVaultSpeed, Duration
+
+		KillerVaultSpeed = PlayerCategory:CreateModule({
+			Name = 'KillerVaultSpeed',
+			Tooltip = 'Modifies how fast you vault windows as killer.',
+			Function = function(Enabled)
+				if Enabled then
+					vd.Killer.Config.VAULT_DURATION = Duration.Value
+				else
+					vd.Killer.Config.VAULT_DURATION = 1.525
+				end
+			end
+		})
+
+		Duration = KillerVaultSpeed:CreateSlider({
+			Name = 'Duration',
+			Default = 1.525,
+			Min = 0.01,
+			Max = 5,
+			Decimal = 100,
+			Clamp = {0.01, 100},
+			Function = function(Val)
+				if KillerVaultSpeed.Enabled then
+					vd.Killer.Config.VAULT_DURATION = Val
+				end
+			end
 		})
 	end)
 end)
@@ -825,6 +1057,7 @@ Run(function() -- Other
 				if Enabled then
 					AutoSkillCheck:Clean(EntityLib.Events.LocalAdded:Connect(LocalAdded))
 					AutoSkillCheck:Clean(EntityLib.Events.LocalRemoved:Connect(LocalRemoved))
+					
 					if EntityLib.Alive then
 						LocalAdded()
 					end

@@ -18,6 +18,7 @@ const TweenService: TweenService = GetService('TweenService')
 const Stats: Stats = GetService('Stats')
 const TextChatService: TextChatService = GetService('TextChatService')
 const UserGameSettings = UserSettings():GetService('UserGameSettings')
+const VIM = Instance.new('VirtualInputManager')
 
 const TidalWave = shared.TidalWave
 const Categories = TidalWave.Categories
@@ -79,15 +80,24 @@ vector.hugeXZ = vector.create(math.huge, 0, math.huge)
 
 const newcclosure = newcclosure or function(f) return f end
 const getnamecallmethod = getnamecallmethod or get_namecall_method
-const iswindowactive = iswindowactive or isrbxactive 
+const isrbxactive = isrbxactive or iswindowactive 
 const require = (IsStudio or (not table.find({'Solara', 'Xeno'}, identifyexecutor and ({identifyexecutor()})[1] or 'Solara'))) and require or nil
 const loadstring = IsStudio and require(script.Parent.Parent.Libraries.Loadstring) or loadstring
+const checkcaller = checkcaller or function() return false end
+const mouse1press = mouse1press or function()
+	const MouseLocation = UIS:GetMouseLocation() - GuiService:GetGuiInset()
+	VIM:SendMouseButtonEvent(MouseLocation.X, MouseLocation.Y, 0, true, game, 0)
+end
+const mouse1release = mouse1release or function()
+	const MouseLocation = UIS:GetMouseLocation() - GuiService:GetGuiInset()
+	VIM:SendMouseButtonEvent(MouseLocation.X, MouseLocation.Y, 0, false, game, 0)
+end
 
 const GetTextBoundsParams = Instance.new('GetTextBoundsParams')
+const rng = Random.new()
 local ViewmodelTool
 local ViewmodelMotor
 local TargetStrafeVector
-const rng = Random.new()
 
 TidalWave:Clean(workspace:GetPropertyChangedSignal('CurrentCamera'):Connect(function()
 	Camera = cloneref(workspace.CurrentCamera or workspace:FindFirstChildOfClass('Camera') or Instance.new('Camera'))
@@ -100,7 +110,7 @@ const function Notify(Properties)
 end
 
 const function Run(f)
-	f()
+	return f()
 end
 
 const function SafeRef(Obj, Path): Instance?
@@ -121,7 +131,7 @@ const function NotifyPoopSploit(FunctionName: string)
 	})
 end
 
-const function GetTextBounds(Text, TextSize, Font, Width)
+const function GetTextBounds(Text, TextSize, Font, Width): Vector2
 	GetTextBoundsParams.Text = Text
 	GetTextBoundsParams.Font = Font
 	GetTextBoundsParams.Size = TextSize
@@ -146,7 +156,7 @@ end
 const function CanClick(): boolean
 	if TidalWave.TopBar.Visible then return false end
 	if UIS:GetFocusedTextBox() then return false end
-	if iswindowactive and not iswindowactive() then return false end
+	if isrbxactive and not isrbxactive() then return false end
 
 	return true
 end
@@ -2874,6 +2884,8 @@ Run(function() -- Movement
 		local ShiftUsePercentage, ShiftPercentage
 		local UseShiftLimits, MinShiftSpeed, MaxShiftSpeed, ShiftKeybind
 		local W, A, S, D, E, Q, ShiftPressed
+
+		local OriginalVel
 		
 		const function GetMoveDirection()
 			if MoveMethod.Value == 'MoveDirection' then
@@ -2947,9 +2959,16 @@ Run(function() -- Movement
 			},
 			Velocity = {
 				Function = function()
-					const CurrentVel = EntityLib.Root.AssemblyLinearVelocity
-					const Vel = GetHortVel()
-					EntityLib.Root.AssemblyLinearVelocity = vector.create(Vel.X, CurrentVel.Y, Vel.Z)
+					const VertLinearVelocity = Fly:GetInstance('VertLinearVelocity')
+					if VertLinearVelocity then
+						VertLinearVelocity.VectorVelocity += GetHortVel()
+						OriginalVel = nil
+					else
+						const CurrentVel = EntityLib.Root.AssemblyLinearVelocity
+						const Vel = GetHortVel()
+						OriginalVel = vector.create(Vel.X, CurrentVel.Y, Vel.Z)
+						EntityLib.Root.AssemblyLinearVelocity = OriginalVel
+					end
 				end,
 			},
 			CFrame = {
@@ -2978,25 +2997,29 @@ Run(function() -- Movement
 				end,
 				Function = function()
 					const HortLinearVelocity = Fly:GetInstance('HortLinearVelocity')
-					const CurrentLinearVelocity, CurrentAttachment = Fly:GetInstance('VertLinearVelocity'), Fly:GetInstance('VertAttachment')
+					const VertLinearVelocity, VertAttachment = Fly:GetInstance('VertLinearVelocity'), Fly:GetInstance('VertAttachment')
 					if HortLinearVelocity then
-						if CurrentLinearVelocity then
-							CurrentLinearVelocity.Enabled = false
+						if VertLinearVelocity then
+							VertLinearVelocity.Enabled = false
 						end
 						HortLinearVelocity.VectorVelocity += GetVertVel()
 					else
-						if CurrentLinearVelocity and CurrentAttachment then
-							CurrentLinearVelocity.Enabled = true
-							CurrentAttachment.Position = EntityLib.Root.AssemblyCenterOfMass - EntityLib.Root.Position
-							CurrentLinearVelocity.VectorVelocity = GetVertVel()
+						if VertLinearVelocity and VertAttachment then
+							VertLinearVelocity.Enabled = true
+							VertAttachment.Position = EntityLib.Root.AssemblyCenterOfMass - EntityLib.Root.Position
+							VertLinearVelocity.VectorVelocity = GetVertVel()
 						end
 					end
 				end,
 			},
 			Velocity = {
 				Function = function()
-					const Vel = EntityLib.Root.AssemblyLinearVelocity
-					EntityLib.Root.AssemblyLinearVelocity = vector.create(Vel.X, GetVertVel().Y, Vel.Z)
+					const HortLinearVelocity = Fly:GetInstance('HortLinearVelocity')
+					if HortLinearVelocity then
+						HortLinearVelocity.VectorVelocity += GetVertVel()
+					else
+						EntityLib.Root.AssemblyLinearVelocity = (OriginalVel or vector.yAxis) + GetVertVel()
+					end
 				end,
 			},
 			CFrame = {
@@ -3095,7 +3118,6 @@ Run(function() -- Movement
 		
 					Fly:Clean(EntityLib.Events.LocalAdded:Connect(LocalAdded))
 					Fly:Clean(EntityLib.Events.LocalRemoved:Connect(LocalRemoved))
-					
 					Fly:Clean(RunService.PreRender:Connect(function()
 						if AlignMethod.Value ~= 'None' and EntityLib.Alive then
 							AlignMethods[AlignMethod.Value].Function()
@@ -3129,7 +3151,7 @@ Run(function() -- Movement
 					end))
 					
 					for i = 1, 0, -1 do
-						local Signal = i == 1 and UIS.InputBegan or UIS.InputEnded
+						const Signal = i == 1 and UIS.InputBegan or UIS.InputEnded
 						Fly:Clean(Signal:Connect(function(Input)
 							if i == 1 and UIS:GetFocusedTextBox() then return end
 							if Input.KeyCode == Enum.KeyCode.W then
@@ -3153,9 +3175,9 @@ Run(function() -- Movement
 					Fly:Clean(ShiftKeybind.Triggered:Connect(function(Pressed)
 						ShiftPressed = Pressed
 					end))
-
+					
 					if UIS.TouchEnabled then
-						local JumpButton: ImageLabel? = SafeRef(Plr, {'PlayerGui', 'TouchGui', 'TouchControlFrame', 'JumpButton'})
+						const JumpButton: ImageLabel? = SafeRef(Plr, {'PlayerGui', 'TouchGui', 'TouchControlFrame', 'JumpButton'})
 						if JumpButton then
 							Fly:Clean(JumpButton:GetPropertyChangedSignal('ImageRectOffset'):Connect(function()
 								E = JumpButton.ImageRectOffset.X == 146 and 1 or 0
@@ -3181,6 +3203,7 @@ Run(function() -- Movement
 
 					W, A, S, D, E, Q = nil, nil, nil, nil, nil, nil
 					ShiftPressed = false
+					OriginalVel = nil
 				end
 			end,
 			ExtraText = function()
@@ -3230,20 +3253,27 @@ Run(function() -- Movement
 		
 		AlignMethod = Fly:CreateDropdown({
 			Name = 'Align Method',
-			List = {'None', 'AlignOrientation', 'CFrame'},
+			List = {
+				[UIS.TouchEnabled and 1 or 2] = 'None',
+				[UIS.TouchEnabled and 2 or 1] = 'AlignOrientation',
+				[3] = 'CFrame'
+			},
 			Tooltip = 'AlignOrientation - Smoothly orientates your character based on the rotation of your camera.\nCFrame - Directly adjusts the Orientation of your character based on the rotation of your camera. (Recommended to use PlatformStand with this)\nNone - Doesn\'t align your character with your camera.',
 			Restart = true
 		})
 		
 		MoveMethod = Fly:CreateDropdown({
 			Name = 'Move Method',
-			List = {'MoveDirection', 'Camera'},
+			List = {
+				[UIS.TouchEnabled and 1 or 2] = 'MoveDirection',
+				[UIS.TouchEnabled and 2 or 1] = 'Camera'
+			},
 			Tooltip = 'MoveDirection - Moves based off the move direction of your Humanoid.\nCamera - Moves based off the orientation of your camera.',
 		})
 
 		PlatformStand = Fly:CreateToggle({
 			Name = 'Platform Stand',
-			Tooltip = 'Puts your Humanoid into the PlatformStanding state, which disables regular physics allowing for smoother movement and fixes CFrame align method. This may cause detections.',
+			Tooltip = 'Puts your Humanoid into the PlatformStanding state\nwhich disables regular physics allowing for smoother movement and fixes CFrame align method.\nThis may cause detections.',
 			Function = function(Enabled)
 				if EntityLib.Alive and Fly.Enabled then
 					EntityLib.Humanoid.PlatformStand = Enabled
@@ -3253,7 +3283,7 @@ Run(function() -- Movement
 
 		Sit = Fly:CreateToggle({
 			Name = 'Sit',
-			Tooltip = 'Makes your character sit.',
+			Tooltip = 'Makes your character sit while flying.',
 			Function = function(Enabled)
 				if EntityLib.Alive and Fly.Enabled then
 					EntityLib.Humanoid.Sit = Enabled
@@ -3471,7 +3501,6 @@ Run(function() -- Movement
 		end
 		
 		const function LocalAdded()
-			LocalRemoved()
 			HighJump:Clean(EntityLib.Humanoid:GetPropertyChangedSignal('FloorMaterial'):Connect(function()
 				if EntityLib.Humanoid.FloorMaterial ~= Enum.HumanoidStateType.Air and Down then
 					Jump()
@@ -3481,30 +3510,46 @@ Run(function() -- Movement
 		
 		HighJump = Movement:CreateModule({
 			Name = 'HighJump',
-			Info = 'Makes you jump high',
+			Tooltip = 'Makes you jump high',
 			Function = function(Enabled)
 				if Enabled then
 					if AutoDisable.Enabled then
 						Jump()
 					else
 						Down = false
+
 						HighJump:Clean(UIS.InputBegan:Connect(function(Input)
-							if Input.KeyCode == Enum.KeyCode.Space and not UIS:GetFocusedTextBox() then
+							if UIS:GetFocusedTextBox() then return end
+							if Input.KeyCode == Enum.KeyCode.Space then
 								Down = true
 								if EntityLib.Humanoid.FloorMaterial ~= Enum.HumanoidStateType.Air then
 									Jump()
 								end
 							end
 						end))
+
 						HighJump:Clean(UIS.InputEnded:Connect(function(Input)
 							if Input.KeyCode == Enum.KeyCode.Space then
 								Down = false
 							end
 						end))
+
 						HighJump:Clean(EntityLib.Events.LocalAdded:Connect(LocalAdded))
 						HighJump:Clean(EntityLib.Events.LocalRemoved:Connect(LocalRemoved))
 						if EntityLib.Alive then
 							LocalAdded()
+						end
+
+						if UIS.TouchEnabled then
+							const JumpButton: ImageLabel? = SafeRef(Plr, {'PlayerGui', 'TouchGui', 'TouchControlFrame', 'JumpButton'})
+							if JumpButton then
+								HighJump:Clean(JumpButton:GetPropertyChangedSignal('ImageRectOffset'):Connect(function()
+									Down = JumpButton.ImageRectOffset.X == 146
+									if Down and EntityLib.Humanoid.FloorMaterial ~= Enum.HumanoidStateType.Air then
+										Jump()
+									end
+								end))
+							end
 						end
 					end
 				elseif ResetVel.Enabled and EntityLib.Alive and EntityLib.Root.AssemblyLinearVelocity.Y > 0 then
@@ -3513,15 +3558,12 @@ Run(function() -- Movement
 			end,
 			ExtraText = function()
 				return Method.Value
-			end
+			end,
 		})
 		
 		Method = HighJump:CreateDropdown({
 			Name = 'Method',
 			List = {'LinearVelocity', 'Velocity', 'CFrame'},
-			Function = function(Val)
-				ResetVel:SetVisible(Val ~= 'CFrame')
-			end
 		})
 		
 		JumpPower = HighJump:CreateSlider({
@@ -3531,7 +3573,7 @@ Run(function() -- Movement
 			Max = 250
 		})
 		
-		ResetVel = HighJump:CreateToggle({
+		ResetVel = Method:BindToggleToAllExcept('CFrame', {
 			Name = 'Reset Vel',
 			Info = 'Resets you Y velocity after disabling HighJump',
 		})
@@ -3560,8 +3602,11 @@ Run(function() -- Movement
 			Name = 'Auto Disable',
 			Default = true,
 			Function = function(Enabled)
-				if HighJump.Enabled and Enabled then
+				if HighJump.Enabled then
 					HighJump:Toggle(true)
+					if Enabled then
+						HighJump:Toggle(true)
+					end
 				end
 			end
 		})
@@ -3692,7 +3737,9 @@ Run(function() -- Movement
 		
 		const function Jump()
 			if EntityLib.Alive and EntityLib.Humanoid.FloorMaterial ~= Enum.Material.Air then
-				Modules.Speed:DisableMovers()
+				if Modules.Speed and Modules.Speed.DisableMovers then
+					Modules.Speed:DisableMovers()
+				end
 
 				if Methods[Method.Value].Init then
 					Methods[Method.Value].Init()
@@ -3729,8 +3776,10 @@ Run(function() -- Movement
 					UpdateFriction()
 				end
 			end
-		
-			Modules.Speed:EnableMovers()
+
+			if Modules.Speed and Modules.Speed.EnableMovers then
+				Modules.Speed:EnableMovers()
+			end
 		
 			if LongJump.Enabled and AutoDisable.Enabled then
 				LongJump:Toggle(true)
@@ -3776,6 +3825,18 @@ Run(function() -- Movement
 
 						if EntityLib.Alive then
 							LocalAdded()
+						end
+
+						if UIS.TouchEnabled then
+							const JumpButton: ImageLabel? = SafeRef(Plr, {'PlayerGui', 'TouchGui', 'TouchControlFrame', 'JumpButton'})
+							if JumpButton then
+								LongJump:Clean(JumpButton:GetPropertyChangedSignal('ImageRectOffset'):Connect(function()
+									Down = JumpButton.ImageRectOffset.X == 146
+									if Down and EntityLib.Humanoid.FloorMaterial ~= Enum.HumanoidStateType.Air then
+										Jump()
+									end
+								end))
+							end
 						end
 					end
 				else
@@ -3844,8 +3905,11 @@ Run(function() -- Movement
 			Name = 'Auto Disable',
 			Default = true,
 			Function = function(Enabled)
-				if LongJump.Enabled and Enabled then
+				if LongJump.Enabled then
 					LongJump:Toggle(true)
+					if Enabled then
+						LongJump:Toggle(true)
+					end
 				end
 			end
 		})
@@ -4010,7 +4074,7 @@ Run(function() -- Movement
 		
 		local Climbed = false
 		const function ClimbingCheck()
-			local State = EntityLib.Humanoid:GetState()
+			const State = EntityLib.Humanoid:GetState()
 			if State == Enum.HumanoidStateType.Climbing then
 				if not Climbed then
 					Climbed = true
@@ -6254,7 +6318,7 @@ Run(function() -- Visuals
 		AddPropertySlider('Specular Scale', 'EnvironmentSpecularScale', 0, 0, 1, 100)
 
 		AddProperty('Set Clock Time', 'ClockTime')
-		AddPropertySlider('Clock Time', 'ClockTime', 0, 0, 24, 10)
+		AddPropertySlider('Clock Time', 'ClockTime', 12, 0, 24, 10)
 		
 		AddProperty('Set Fog Start', 'FogStart')
 		AddPropertySlider('Fog Start', 'FogStart', 0, 0, 100)
@@ -8335,7 +8399,7 @@ Run(function() -- Other
 				if not getnamecallmethod then NotifyPoopSploit('getnamecallmethod'); return end
 		
 				OldIndex = hookmetamethod(game, '__index', newcclosure(function(self, Key)
-					if self == Plr and Key:lower() == 'kick' then
+					if self == Plr and Key:match('[kK]ick') and not checkcaller() then
 						return error("Expected ':' not '.' calling member function Kick", 2)
 					end
 		
@@ -8343,10 +8407,7 @@ Run(function() -- Other
 				end))
 		
 				OldNamecall = hookmetamethod(game, '__namecall', newcclosure(function(self, ...)
-					if self == Plr and getnamecallmethod():lower() == 'kick' then
-						return
-					end
-		
+					if self == Plr and getnamecallmethod():match('[kK]ick') and not checkcaller() then return end
 					return OldNamecall(self, ...)
 				end))
 		
@@ -8369,8 +8430,8 @@ Run(function() -- Other
 				if not getnamecallmethod then NotifyPoopSploit('getnamecallmethod'); return end
 		
 				OldIndex = hookmetamethod(game, '__index', newcclosure(function(self, Key)
-					if self == TeleportService then
-						if Key:lower() == 'teleport' then
+					if self == TeleportService and not checkcaller() then
+						if Key:match('[tT]elport') then
 							return error("Expected ':' not '.' calling member function Teleport", 2)
 						elseif Key == 'TeleportToPlaceInstance' then
 							return error("Expected ':' not '.' calling member function TeleportToPlaceInstance", 2)
@@ -8381,11 +8442,9 @@ Run(function() -- Other
 				end))
 		
 				OldNamecall = hookmetamethod(game, '__namecall', newcclosure(function(self, ...)
-					if self == TeleportService then
-						local Method = getnamecallmethod()
-						if Method:lower() == 'teleport' or Method == 'TeleportToPlaceInstance' then
-							return
-						end
+					if self == TeleportService and not checkcaller() then
+						const Method = getnamecallmethod()
+						if Method:match('[tT]eleport') or Method == 'TeleportToPlaceInstance' then return end
 					end
 		
 					return OldNamecall(self, ...)
@@ -8673,7 +8732,7 @@ Run(function() -- Other
 	Run(function() -- GameplayPausedDisabler
 		Other:CreateModule({
 			Name = 'GameplayPausedDisabler',
-			Info = 'Removes the gameplay paused popup',
+			Tooltip = 'Removes the gameplay paused popup',
 			Function = function(Enabled)
 				GuiService:SetGameplayPausedNotificationEnabled(not Enabled)
 			end
@@ -8683,12 +8742,10 @@ Run(function() -- Other
 	Run(function() -- Panic
 		Other:CreateButton({
 			Name = 'Panic',
-			Info = 'Disables all the currently enabled modules',
+			Tooltip = 'Disables all the currently enabled modules',
 			Function = function()
-				for _, v in Modules do
-					if v.Enabled then
-						v:Toggle(true)
-					end
+				for _, Module in Modules do
+					Module:Disable(true)
 				end
 			end,
 		})
@@ -8699,7 +8756,7 @@ Run(function() -- Other
 		
 		PartPath = Other:CreateModule({
 			Name = 'Part Path',
-			Info = 'Copies the path of parts you click on',
+			Tooltip = 'Copies the path of parts you click on',
 			Enabled = function()
 				if not setclipboard then
 					NotifyPoopSploit('setclipboard')
@@ -8804,12 +8861,9 @@ Run(function() -- Other
 		local OldKeys
 		local BoundKeys
 		
-		local function GrabBoundKeys()
-			local PlayerScripts = Plr:FindFirstChildOfClass('PlayerScripts')
-			local PlayerModule = PlayerScripts and PlayerScripts:FindFirstChild('PlayerModule')
-			local CameraModule = PlayerModule and PlayerModule:FindFirstChild('CameraModule')
-			local MouseLockController = CameraModule and CameraModule:FindFirstChild('MouseLockController')
-			BoundKeys = MouseLockController and MouseLockController:FindFirstChild('BoundKeys')
+		const function GrabBoundKeys()
+			const PlayerScripts = Plr:FindFirstChildOfClass('PlayerScripts')
+			BoundKeys = PlayerScripts and SafeRef(PlayerScripts, {'PlayerModule', 'CameraModule', 'MouseLockController', 'BoundKeys'})
 		end
 		
 		ShiftLock = Other:CreateModule({
@@ -8838,7 +8892,7 @@ Run(function() -- Other
 		
 		Keybinds = ShiftLock:CreateTextList({
 			Name = 'Keybinds',
-			List = BoundKeys and BoundKeys.Value:split(',') or {'LeftShift', 'RightShift'},
+			List = BoundKeys and BoundKeys.Value:split(',') or {'LeftShift'},
 			Function = function(Enabled)
 				if ShiftLock.Enabled then
 					if not BoundKeys then
@@ -8859,21 +8913,35 @@ Run(function() -- Other
 	Run(function() -- View
 		local View, TextBox, Player
 		
-		local function PlayerAdded(NewPlayer)
+		const function PlayerAdded(NewPlayer)
 			if TextBox:CheckPlayer(NewPlayer) then
 				Player = NewPlayer
 			end
 		end
 		
-		local function PlayerRemoved(PlayerRemoving)
+		const function PlayerRemoved(PlayerRemoving)
 			if PlayerRemoving == Player then
 				Notify({
+					Title = 'View',
 					Text = 'View has been disabled becuase the player left',
+					Type = 'Warning',
 					Duration = 10
 				})
 		
 				Player = nil
 				View:Toggle(true)
+			end
+		end
+		
+		const function EntityAdded(Entity)
+			if Entity.Player and Entity.Player == Player then
+				Camera.CameraSubject = Entity.Humanoid
+			end
+		end
+
+		const function EntityRemoved(Entity)
+			if Entity.Player and Entity.Player == Player and EntityLib.Alive then
+				Camera.CameraSubject = EntityLib.Humanoid
 			end
 		end
 		
@@ -8883,33 +8951,20 @@ Run(function() -- Other
 			Function = function(Enabled)
 				if Enabled then
 					TextBox:Refresh()
-		
-					local Ent = Player and EntityLib:FindEntity(Player) or nil
-		
-					local function CharacterAdded(Char)
-						if Char.Player and Char.Player == Player then
-							Camera.CameraSubject = Char.Humanoid
-						end
+					
+					const Entity = Player and EntityLib:FindEntity(Player) or nil
+					if Entity then
+						Camera.CameraSubject = Entity.Humanoid
 					end
-		
-					local function CharacterRemoved(Char)
-						if Char.Player and Char.Player == Player and EntityLib.Alive then
-							Camera.CameraSubject = EntityLib.Humanoid
-						end
-					end
-		
+					
 					View:Clean(Camera:GetPropertyChangedSignal('CameraSubject'):Connect(function()
-						if Ent then
-							Camera.CameraSubject = Ent.Humanoid
+						if Entity then
+							Camera.CameraSubject = Entity.Humanoid
 						end
 					end))
-		
-					if Ent then
-						Camera.CameraSubject = Ent.Humanoid
-					end
-		
-					View:Clean(EntityLib.Events.EntityAdded:Connect(CharacterAdded))
-					View:Clean(EntityLib.Events.EntityRemoved:Connect(CharacterRemoved))
+					
+					View:Clean(EntityLib.Events.EntityAdded:Connect(EntityAdded))
+					View:Clean(EntityLib.Events.EntityRemoved:Connect(EntityRemoved))
 					View:Clean(Players.PlayerAdded:Connect(PlayerAdded))
 					View:Clean(Players.PlayerRemoving:Connect(PlayerRemoved))
 				else
@@ -8925,6 +8980,14 @@ Run(function() -- Other
 			Placeholder = '[Player Name]',
 			Function = function(NewPlayer)
 				Player = NewPlayer
+				if View.Enabled then
+					const Entity = Player and EntityLib:FindEntity(Player) or nil
+					if Entity then
+						Camera.CameraSubject = Entity.Humanoid
+					elseif EntityLib.Alive then
+						Camera.CameraSubject = EntityLib.Humanoid
+					end
+				end
 			end
 		})
 	end)

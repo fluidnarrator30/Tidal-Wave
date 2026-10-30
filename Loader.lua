@@ -209,13 +209,13 @@ const function Load(Path, Name)
         IncrementBar()
         return Result
     else
-        const Function, LoadResult = loadstring(DownloadFile(Path), Name)
+        const Function, LoadError = loadstring(DownloadFile(Path), Name)
         if Function then
             const Result = Function()
             IncrementBar()
             return Result
         else
-            return Error(`Failed to load '{Name}'`, Name, LoadResult)
+            return Error(`Failed to load '{Name}'`, Name, LoadError)
         end
     end
 end
@@ -246,13 +246,23 @@ Load('Games/Universal.lua', 'Universal')
 
 if SupportedGame then
     LoadingInfo.Text = `Loading {TidalWave.PlaceName} Modules...`
-    const Function = loadstring(SupportedGame, `{TidalWave.PlaceName}/{game.PlaceId}`)
+    const Function, Result = loadstring(SupportedGame, `{TidalWave.PlaceName}/{game.PlaceId}`)
+	local Shutdown = false
+	const ShutdownFunction = function()
+		Shutdown = true
+	end
+	TidalWave:Clean(ShutdownFunction)
     
-    if typeof(Function) == 'function' then
+    if Function then
         Function()
-        IncrementBar()
+		if Shutdown then return end
+		IncrementBar()
+		const Index = table.find(TidalWave.Connections, ShutdownFunction)
+		if Index then
+			table.remove(TidalWave.Connections, Index)
+		end
     else
-        Error(`Failed to load game: '{TidalWave.PlaceName}/{game.PlaceId}'`, TidalWave.PlaceName, Function)
+        Error(`Failed to load game: '{TidalWave.PlaceName}/{game.PlaceId}'`, TidalWave.PlaceName, Result)
     end
 end
 
@@ -273,4 +283,4 @@ TidalWave:Notify({
     Duration = 5
 })
 
-task.defer(TidalWave.Load, TidalWave)
+TidalWave:Load()

@@ -24,7 +24,6 @@ local NotificationHolder, HudFolder, CategoryHolder, MenuHolder, ColorPickerHold
 
 const Plr: Player = Players.LocalPlayer
 local Camera: Camera = cloneref(workspace.CurrentCamera or workspace:FindFirstChildOfClass('Camera') or Instance.new('Camera'))
-const Mouse: Mouse = cloneref(Plr:GetMouse())
 
 const Color3 = table.clone(Color3)
 Color3.White = Color3.new(1, 1, 1)
@@ -60,6 +59,12 @@ table.len = function(Tab)
 		Len += 1
 	end
 	return Len
+end
+table.removeValue = function(Tab, Value)
+	const Index = table.find(Tab, Value)
+	if Index then
+		table.remove(Tab, Index)
+	end
 end
 
 const IsStudio = RunService:IsStudio()
@@ -143,7 +148,7 @@ local TidalWave = {
 	NotificationHorizontalAlignment = 'Right',
 	NotificationVerticalAlignment = 'Bottom',
 	NotificationFillDirection = 'Up',
-	Version = '2.4.1-beta',
+	Version = '2.4.2-beta',
 	Theme = 'TidalWave',
 	RGBTable = {
 		Linear = {},
@@ -182,7 +187,7 @@ local TidalWave = {
 --#region Functions
 
 const function Run(f)
-	f()
+	return f()
 end
 
 const function AddMaid(Obj)
@@ -596,7 +601,8 @@ const GUICHECK_BLACKLIST = {
 
 const function GuiCheck(GuiObject)
 	const Parent = Gui.Parent:IsA('BasePlayerGui') and Gui.Parent or CoreGui
-	const Objects = Parent:GetGuiObjectsAtPosition(Mouse.X, Mouse.Y)
+	const MouseLocation = UIS:GetMouseLocation() - GuiService:GetGuiInset()
+	const Objects = Parent:GetGuiObjectsAtPosition(MouseLocation.X, MouseLocation.Y)
 
 	for _, Obj in Objects do
 		if Obj == GuiObject then
@@ -691,32 +697,50 @@ const function SetIcon(Obj, IconName)
 	Obj.ImageRectSize = Icon.ImageRectSize
 end
 
-const LoopClean_SearchedTables = {}
+local LoopClean
 
-const function LoopClean(Tab, First)
-	if getmetatable(Tab) then
-		setmetatable(Tab, nil)
-	end
+Run(function()
+	const SearchedTables = {}
 
-	if table.len(Tab) > 0 then
-		for i, v in Tab do
-			if typeof(v) == 'table' and not table.find(LoopClean_SearchedTables, v) then
-				table.insert(LoopClean_SearchedTables, v)
-				LoopClean(v)
-			elseif typeof(v) == 'thread' then
-				pcall(task.cancel, v)
-			elseif typeof(v) == 'RBXScriptConnection' then
-				v:Disconnect()
+	const Types = {
+		['table'] = function(v)
+			if SearchedTables[v] then return end
+			SearchedTables[v] = true
+			LoopClean(v)
+		end,
+		['thread'] = function(v)
+			pcall(task.cancel, v)
+		end,
+		['RBXScriptConnection'] = function(v)
+			v:Disconnect()
+		end
+	}
+
+	LoopClean = function(Tab, First)
+		if getmetatable(Tab) then
+			setmetatable(Tab, nil)
+		end
+	
+		if First then
+			table.clear(SearchedTables)
+		end
+	
+		if table.len(Tab) > 0 then
+			for _, v in Tab do
+				const Function = Types[typeof(v)]
+				if Function then
+					Function(v)
+				end
 			end
 		end
+	
+		if First then
+			table.clear(SearchedTables)
+		end
+	
+		table.clear(Tab)
 	end
-
-	if First then
-		table.clear(LoopClean_SearchedTables)
-	end
-
-	table.clear(Tab)
-end
+end)
 
 const function RemoveTags(Str)
 	return Str:gsub('<[^<>]->', '')
@@ -735,7 +759,7 @@ const function NotifyPoopSploit(Function)
 	})
 end
 
-const function GetAssetFromText(Text)
+const function GetAssetFromText(Text: string): (string?, string?)
 	const RbxAsset = Text:match('^rbxassetid://%d+$')
 	if RbxAsset then
 		return RbxAsset
@@ -1143,6 +1167,18 @@ function TidalWave:RemoveModule(Name)
 			if Option.Enabled and Option.Toggle then
 				Option:Toggle()
 			end
+			if Option.Object then
+				Option.Object:Destroy()
+				Option.Object = nil
+			end
+		end
+
+		for _, Keybind in Module.Keybinds do
+			table.removeValue(self.ActiveKeybinds, Keybind)
+			if Keybind.Object then
+				Keybind.Object:Destroy()
+				Keybind.Object = nil
+			end
 		end
 
 		for _, v in Module.Category.Options do
@@ -1170,7 +1206,7 @@ function TidalWave:RemoveButton(Name)
 		Button.Object:Destroy()
 		Button.Category = nil
 		LoopClean(Button, true)
-		self.Buttons[Button] = nil
+		self.Buttons[Name] = nil
 	end
 end
 
@@ -1321,23 +1357,23 @@ function TidalWave:Save(Profile, CustomGameConfig)
 	if not writefile then return end
 
 	const GuiConfig = {
-		Scale = TidalWave.Scale,
-		Profile = Profile or TidalWave.Profile or 'Default',
-		Profiles = TidalWave.Profiles or {'Default'},
-		Friends = TidalWave.Friends or {},
+		Scale = self.Scale,
+		Profile = Profile or self.Profile or 'Default',
+		Profiles = self.Profiles or {'Default'},
+		Friends = self.Friends or {},
 		Fonts = {
 			Regular = FontToTable(self.Fonts.Regular),
 			Medium = FontToTable(self.Fonts.Medium),
 			Bold = FontToTable(self.Fonts.Bold),
 		},
 		Themes = SaveThemes(),
-		Theme = TidalWave.Theme or 'TidalWave',
+		Theme = self.Theme or 'TidalWave',
 		Menus = {},
 		HudLocations = {},
 		Categories = {}
 	}
 
-	for Name, Menu in TidalWave.Menus do
+	for Name, Menu in self.Menus do
 		if MENU_SAVE_BLACKLIST[Name] then continue end
 
 		const Saved = {
@@ -1349,8 +1385,8 @@ function TidalWave:Save(Profile, CustomGameConfig)
 			if Option.Options then
 				Saved.Options[OptionName] = {
 					Enabled = Option.Enabled,
-					Options = TidalWave:SaveOptions(Option.Options),
-					Keybinds = TidalWave:SaveOptions(Option.Keybinds)
+					Options = self:SaveOptions(Option.Options),
+					Keybinds = self:SaveOptions(Option.Keybinds)
 				}
 			elseif Option.Save then
 				Option:Save(Saved.Options)
@@ -1368,7 +1404,7 @@ function TidalWave:Save(Profile, CustomGameConfig)
 		GuiConfig.HudLocations[Obj.Name] = UDim2ToTable(Obj.Position)
 	end
 
-	for Name, Category in TidalWave.Categories do
+	for Name, Category in self.Categories do
 		Category:Save(GuiConfig.Categories)
 	end
 
@@ -1381,11 +1417,11 @@ function TidalWave:Save(Profile, CustomGameConfig)
 			Buttons = {}
 		}
 	
-		for _, Module in TidalWave.Modules do
+		for _, Module in self.Modules do
 			Module:Save(GameConfig.Modules)
 		end
 	
-		for _, Button in TidalWave.Buttons do
+		for _, Button in self.Buttons do
 			Button:Save(GameConfig.Buttons)
 		end
 
@@ -1480,19 +1516,28 @@ function TidalWave:StopRGB()
 	end
 end
 
-function TidalWave:Yield(Function)
-	local Thread = coroutine.running()
-	local Con; Con = self:Clean(task.spawn(function()
-		local Result
-		repeat
-			Result = Function()
-			task.wait()
-		until Result
-		coroutine.resume(Thread)
-		Con:Disconnect()
-	end))
+function TidalWave:WaitForInit(Function)
+	if Function() then return true end
 
-	coroutine.yield()
+	const MainThread = coroutine.running()
+	local Thread
+	const ShutdownFunction = function()
+		if Thread then
+			Thread:Disconnect()
+		end
+		coroutine.resume(MainThread, false)
+	end
+
+	Thread = self:Clean(task.spawn(function()
+		repeat
+			task.wait()
+		until Function()
+		table.removeValue(self.Connections, ShutdownFunction)
+		coroutine.resume(MainThread, true)
+	end))
+	self:Clean(ShutdownFunction)
+
+	return coroutine.yield()
 end
 
 --#endregion Shared Functions
@@ -1534,7 +1579,7 @@ function TidalWave:Init()
 	MobileButtonHolder = CreateHolder('MobileButtons', Gui)
 	
 	const TopBarInsetPadding = Instance.new('UIPadding')
-	TopBarInsetPadding.PaddingTop = UDim.new(0, (GuiService.TopbarInset.Height + 2) / GuiScale.Scale)
+	TopBarInsetPadding.PaddingTop = UDim.new(0, (GuiService:GetGuiInset().Y + 2) / GuiScale.Scale)
 	TopBarInsetPadding.PaddingLeft = UDim.new(0, 8)
 	TopBarInsetPadding.Parent = CategoryHolder
 	
@@ -1625,7 +1670,7 @@ function TidalWave:Init()
 	end))
 	
 	self:Clean(GuiScale:GetPropertyChangedSignal('Scale'):Connect(function()
-		TopBarInsetPadding.PaddingTop = UDim.new(0, (GuiService.TopbarInset.Height + 2) / GuiScale.Scale)
+		TopBarInsetPadding.PaddingTop = UDim.new(0, (GuiService:GetGuiInset().Y + 2) / GuiScale.Scale)
 		TopBarInsetPadding.PaddingLeft = UDim.new(0, 8 / GuiScale.Scale)
 		ScaledGui.Size = UDim2.fromScale(1 / GuiScale.Scale, 1 / GuiScale.Scale)
 		for _, v in ScaledGui:QueryDescendants('GuiObject[Visible = true]') do
@@ -1639,7 +1684,7 @@ function TidalWave:Init()
 	end))
 
 	self:Clean(GuiService:GetPropertyChangedSignal('TopbarInset'):Connect(function()
-		TopBarInsetPadding.PaddingTop = UDim.new(0, (GuiService.TopbarInset.Height + 2) / GuiScale.Scale)
+		TopBarInsetPadding.PaddingTop = UDim.new(0, (GuiService:GetGuiInset().Y + 2) / GuiScale.Scale)
 	end))
 
 	self:Clean(task.spawn(function()
@@ -1701,7 +1746,6 @@ function TidalWave:Init()
 			local KeepOnTeleport; KeepOnTeleport = ConfigMenu:CreateToggle({
 				Name = 'Keep On Teleport',
 				Info = 'Keeps TidalWave opened when teleporting through games',
-				Default = true,
 				Enabled = function()
 					if not queueonteleport then return end
 					KeepOnTeleport:Clean(Plr.OnTeleport:Once(function()
@@ -1718,6 +1762,7 @@ function TidalWave:Init()
 					end))
 				end
 			})
+			KeepOnTeleport:Toggle()
 			
 			AllowMouseBinding = ConfigMenu:CreateToggle({
 				Name = 'Allow Mouse Binding',
@@ -3426,6 +3471,9 @@ Components = {
 					TextGUI:RemoveModule(Name)
 					self:DisconnectAll()
 					self:ClearInstances()
+					if Properties.Disabled then
+						task.spawn(Properties.Disabled)
+					end
 				end
 		
 				if Properties.Function then
@@ -3625,23 +3673,30 @@ Components = {
 			const Function = Properties.Function
 			const Name = Properties.Name
 			const SubbedName = Name:gsub(' ', '')
+			const RequiresRestart = Properties.Restart
 			local CurrentText = Properties.Default or ''
 			local TextBox
 			
 			Properties.Function = function(Text, Loaded)
-				local Asset, Result = GetAssetFromText(Text)
+				const Asset, Result = GetAssetFromText(Text)
 			
 				TextBox.Value = Asset or Properties.Default or ''
 				CurrentText = Text
-			
+				
 				if Asset then
-					Function(Asset)
+					if Function then
+						Function(Asset)
+					end
 				elseif Result and not Loaded then
 					Notify({
 						Text = Result,
 						Duration = 10,
 						Type = 'Error'
 					})
+				end
+
+				if RequiresRestart then
+					Properties.Module:Restart()
 				end
 			end
 			
@@ -4354,8 +4409,9 @@ Components = {
 
 			const function OnColorAreaDragged()
 				const Scale = GuiScale.Scale
-				const X = math.clamp((Mouse.X - ColorBackground.AbsolutePosition.X) / Scale, 0, ColorBackground.Size.X.Offset)
-				const Y = math.clamp((Mouse.Y - ColorBackground.AbsolutePosition.Y) / Scale, 0, ColorBackground.Size.Y.Offset)
+				const MouseLocation = UIS:GetMouseLocation() - GuiService:GetGuiInset()
+				const X = math.clamp((MouseLocation.X - ColorBackground.AbsolutePosition.X) / Scale, 0, ColorBackground.Size.X.Offset)
+				const Y = math.clamp((MouseLocation.Y - ColorBackground.AbsolutePosition.Y) / Scale, 0, ColorBackground.Size.Y.Offset)
 				Plus.Position = UDim2.fromOffset(X, Y)
 
 				Hue = 1 - (X / ColorBackground.Size.X.Offset)
@@ -4366,7 +4422,8 @@ Components = {
 
 			const function OnColorStripDragged()
 				const Scale = GuiScale.Scale
-				const Y = math.clamp((Mouse.Y - ColorStrip.AbsolutePosition.Y) / Scale, 0, ColorStrip.Size.Y.Offset)
+				const MouseLocation = UIS:GetMouseLocation() - GuiService:GetGuiInset()
+				const Y = math.clamp((MouseLocation.Y - ColorStrip.AbsolutePosition.Y) / Scale, 0, ColorStrip.Size.Y.Offset)
 				Arrow.Position = UDim2.new(1, 0, 0, Y)
 
 				Val = 1 - (Y / ColorStrip.Size.Y.Offset)
@@ -5566,10 +5623,7 @@ Components = {
 					DeleteButton.MouseButton1Click:Connect(function()
 						Tooltip.Visible = false
 						TextList:Remove(Properties.Name)
-						local Index = table.find(CreatedButtons, Frame)
-						if Index then
-							table.remove(CreatedButtons, Index)
-						end
+						table.removeValue(CreatedButtons, Frame)
 						StopListeningFont(Button)
 						if RenameTextBox then
 							StopListeningFont(RenameTextBox)
@@ -5653,7 +5707,7 @@ Components = {
 			end
 			
 			function TextList:Find(Val)
-				local Index = table.find(TextList.Enabled, Val)
+				const Index = table.find(TextList.Enabled, Val)
 				if Index then
 					return TextList.Enabled[Index], Index
 				end
@@ -5700,7 +5754,7 @@ Components = {
 			end
 			
 			function TextList:Disable(Val)
-				local Index = table.find(TextList.Enabled, Val)
+				const Index = table.find(TextList.Enabled, Val)
 				if Index then
 					table.remove(TextList.Enabled, Index)
 					if Properties.Function then
@@ -5883,7 +5937,7 @@ Components = {
 			BindButton.TextColor3 = GetColor('Text/Primary')
 			BindButton.TextSize = 24
 			BindButton.FontFace = GetFont('Regular')
-			BindButton.Text = Properties.MobileButton == false and 'Added' or (UIS.TouchEnabled and 'Tap to add' or (Properties.Keybind or 'None'))
+			BindButton.Text = UIS.TouchEnabled and (Properties.MobileButtton == false and 'Tap to add' or 'Added') or (Properties.Keybind or 'None')
 			BindButton.AutoButtonColor = false
 			BindButton.Parent = Background
 			AddCorner(BindButton, UDim.new(0, 7))
@@ -5972,30 +6026,17 @@ Components = {
 					self.MobileButton = nil
 				end
 			end
-
-			function Keybind:UpdateActiveKeybind()
-				if self.Keybind ~= 'None' then
-					if not table.find(TidalWave.ActiveKeybinds, self) then
-						table.insert(TidalWave.ActiveKeybinds, self)
-					end
-				else
-					local Index = table.find(TidalWave.ActiveKeybinds, self)
-					if Index then
-						table.remove(TidalWave.ActiveKeybinds, Index)
-					end
-				end
-			end
 			
 			function Keybind:SetKeybind(Bind)
+				table.removeValue(TidalWave.ActiveKeybinds, self)
 				self.Keybind = Bind or 'None'
-				BindButton.Text = Properties.MobileButton == false and 'Added' or (UIS.TouchEnabled and 'Tap to add' or (self.Keybind or 'None'))
-				self:UpdateActiveKeybind()
+				BindButton.Text = UIS.TouchEnabled and (Properties.MobileButtton == false and 'Tap to add' or 'Added') or self.Keybind
+				table.insert(TidalWave.ActiveKeybinds, self)
 
 				if Properties.Function then
 					Properties.Function(self.Keybind)
 				end
 			end
-			Keybind:UpdateActiveKeybind()
 			
 			function Keybind:ToggleHold()
 				if self.Hold ~= nil and EnabledBar then
@@ -6078,6 +6119,10 @@ Components = {
 					end
 				end
 			})
+
+			if Keybind.Keybind ~= 'None' then
+				table.insert(TidalWave.ActiveKeybinds, Keybind)
+			end
 			
 			Keybind.Object = MainFrame
 			Properties.Module.Keybinds[Name] = Keybind
@@ -6664,7 +6709,7 @@ Components = {
 			Properties.Module.Options[SubbedName] = Toggle
 
 			if Properties.Default then
-				task.defer(Toggle.Toggle, Toggle)
+				Toggle:Toggle()
 			end
 			
 			return Toggle
@@ -7695,10 +7740,7 @@ Components = {
 				else
 					pcall(delfile, Path)
 				end
-				local Index = table.find(TidalWave.Profiles, Properties.Name)
-				if Index then
-					table.remove(TidalWave.Profiles, Index)
-				end
+				table.removeValue(TidalWave.Profiles, Properties.Name)
 				for _, v in {Frame, Background, NameLabel, RenameTextBox, DeleteButton, DeleteButtonImage, Load, Save} do
 					StopListeningObject(v)
 					StopListeningFont(v)
@@ -8890,10 +8932,7 @@ Components = {
 			end
 			
 			function Dropdown:Remove(Value)
-				local Index = table.find(Dropdown.List, Value)
-				if Index then
-					table.remove(Dropdown.List, Index)
-				end
+				table.removeValue(self.List, Value)
 			end
 			
 			function Dropdown:Add(Value)
@@ -9008,10 +9047,7 @@ Components = {
 					Delete.MouseButton1Click:Connect(function()
 						Tooltip.Visible = false
 						Dropdown:Remove(Properties.Name)
-						local Index = table.find(CreatedButtons, Button)
-						if Index then
-							table.remove(CreatedButtons, Index)
-						end
+						table.removeValue(CreatedButtons, Button)
 						for _, v in {Button, Delete, Image, RenameTextBox} do
 							StopListeningObject(v)
 							StopListeningFont(v)
@@ -9168,7 +9204,7 @@ Components = {
 			Button.BackgroundColor3, Button.BackgroundTransparency = GetColor('Background/MobileButton')
 			Button.BorderSizePixel = 0
 			Button.Size = Properties.Size or UDim2.fromOffset(40, 40)
-			Button.Position = Properties.Position or UDim2.fromOffset(5, GuiService.TopbarInset.Height)
+			Button.Position = Properties.Position or UDim2.fromOffset(5, GuiService:GetGuiInset().Y)
 			Button.Text = Properties.Name or ''
 			Button.TextColor3 = GetColor('Text/Primary')
 			Button.FontFace = GetFont('Regular')
@@ -9226,5 +9262,6 @@ Components = {
 }
 
 TidalWave:Init()
+TidalWave.Init = nil
 
 return TidalWave
