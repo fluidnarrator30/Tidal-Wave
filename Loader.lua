@@ -50,7 +50,7 @@ const function DownloadFile(Path, Function)
 			return game:HttpGet(`https://raw.githubusercontent.com/fluidnarrator30/Tidal-Wave/{Commit}/{Path}`, true)
 		end)
         if Success and Result ~= '404: Not Found' then
-            writefile(Path, Result)
+            writefile(`TidalWave/{Path}`, Result)
         end
 	end
     
