@@ -30,6 +30,9 @@ const ObjectFunctions = Libraries.ObjectFunctions
 const Signal = Libraries.Signal
 const AuraAnimations = Libraries.AuraAnimations
 const Prediction = Libraries.Prediction
+const Color3 = Libraries.Color3
+const table = Libraries.table
+const vector = Libraries.vector
 
 const Combat = Categories.Combat
 const PlayerCategory = Categories.Player
@@ -44,39 +47,8 @@ const IsStudio = RunService:IsStudio()
 const Plr: Player = Players.LocalPlayer
 local Camera: Camera = cloneref(workspace.CurrentCamera or workspace:FindFirstChildOfClass('Camera') or Instance.new('Camera'))
 
-const Color3 = table.clone(Color3)
-Color3.White = Color3.new(1, 1, 1)
-Color3.Black = Color3.new()
-Color3.Red = Color3.new(1, 0, 0)
-Color3.Green = Color3.new(0, 1, 0)
-Color3.Blue = Color3.new(0, 0, 1)
-Color3.Yellow = Color3.new(1, 1, 0)
-Color3.Cyan = Color3.new(0, 1, 1)
-Color3.Pink = Color3.new(1, 0, 1)
-
-const table = table.clone(table)
-table.len = function(Tab)
-	local Len = 0
-	for _ in Tab do
-		Len += 1
-	end
-	
-	return Len
-end
-
 const UDim2 = table.clone(UDim2)
 UDim2.zero = UDim2.new()
-
-const vector = table.clone(vector)
-vector.xAxis = vector.create(1, 0, 0)
-vector.yAxis = vector.create(0, 1, 0)
-vector.zAxis = vector.create(0, 0, 1)
-vector.hort = vector.create(1, 0, 1)
-vector.huge = vector.create(math.huge, math.huge, math.huge)
-vector.hugeX = vector.create(math.huge, 0, 0)
-vector.hugeY = vector.create(0, math.huge, 0)
-vector.hugeZ = vector.create(0, 0, math.huge)
-vector.hugeXZ = vector.create(math.huge, 0, math.huge)
 
 const newcclosure = newcclosure or function(f) return f end
 const getnamecallmethod = getnamecallmethod or get_namecall_method
@@ -1257,8 +1229,8 @@ Run(function() -- Combat
 		end
 
 		const function GetTarget(Origin, IgnoreList)
-			if RollChance(AutoFire.Enabled and 100 or HitChance.Value) then
-				const TargetPart = RollChance(AutoFire.Enabled and 100 or HeadshotChance.Value) and 'Head' or 'Root'
+			if RollChance(HitChance.Value) then
+				const TargetPart = RollChance(HeadshotChance.Value) and 'Head' or 'Root'
 				const EntityFunction = Mode.Value == 'Mouse' and EntityLib.GetClosestEntityWithinMouse or EntityLib.GetClosestEntity
 				const Entity = EntityFunction(EntityLib, {
 					Range = Range.Value,
@@ -1491,7 +1463,8 @@ Run(function() -- Combat
 				end
 			end,
 			ExtraText = function()
-				return Method.Value ~= 'FindPartOnRay' and Method.Value:gsub('FindPartOnRay', '') or Method.Value
+				const _, Index = Method.Value:find('FindPartOnRayWith')
+				return Index and 'RayWith' .. Method.Value:sub(Index + 1) or Method.Value
 			end,
 		})
 
@@ -1525,7 +1498,7 @@ Run(function() -- Combat
 		Method = SilentAim:CreateDropdown({
 			Name = 'Method',
 			List = {'FindPartOnRay', 'FindPartOnRayWithIgnoreList', 'FindPartOnRayWithWhitelist', 'ScreenPointToRay', 'ViewportPointToRay', 'Raycast', 'Ray'},
-			Tooltip = 'FindPartOnRay* - Deprecated methods of raycasting used in old games\nRaycast - The modern raycast method\n*PointToRay - Method to generate a ray from a screen position\nRay - Used in old games',
+			Tooltip = 'FindPartOnRay* - Deprecated methods of raycasting used in old games\nRaycast - The modern raycast method\nPointToRay* - Method to generate a ray from a screen position\nRay* - Used in old games',
 			Restart = true
 		})
 
@@ -1647,7 +1620,8 @@ Run(function() -- Combat
 			Name = 'Thickness',
 			Default = 1,
 			Min = 1,
-			Max = 10
+			Max = 10,
+			Function = UpdateCircle
 		})
 
 		Projectile = SilentAim:CreateToggle({
@@ -1845,7 +1819,7 @@ Run(function() -- Player
 		
 		const function Parent(Obj, Parent)
 			Obj.Parent = Parent
-			local TimeOut = os.clock() + 5
+			local TimeOut = os.clock() + 0.2
 			repeat task.wait() until Obj.Parent == Parent or not DropTools.Enabled or os.clock() >= TimeOut
 			Obj.Parent = workspace
 		end
@@ -1878,7 +1852,7 @@ Run(function() -- Player
 		end
 		
 		DropTools = PlayerCategory:CreateModule({
-			Name = 'Drop Tools',
+			Name = 'DropTools',
 			Info = 'Drops all the tools in your backpack',
 			Function = function(Enabled)
 				DropTools:Clean(Plr.ChildAdded:Connect(BackpackAdded))
@@ -5646,6 +5620,12 @@ Run(function() -- Visuals
 	end)
 
 	Run(function() -- Cape
+		--[[
+
+		not vibe coded trust
+
+		]]
+		
 		local Cape, Texture, Part, Motor
 		
 		const function CreateMotor()
@@ -6309,7 +6289,7 @@ Run(function() -- Visuals
 		AddPropertyColorPicker('Color Shift Top', 'ColorShift_Top')
 
 		AddProperty('Set Shadows', 'GlobalShadows')
-		AddPropertyToggle('Shadows', 'GlobalShadows')
+		AddPropertyToggle('Shadows', 'GlobalShadows', false)
 
 		AddProperty('Set Diffuse Scale', 'EnvironmentDiffuseScale')
 		AddPropertySlider('Diffuse Scale', 'EnvironmentDiffuseScale', 0, 0, 1, 100)

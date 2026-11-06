@@ -63,8 +63,9 @@ end
 table.removeValue = function(Tab, Value)
 	const Index = table.find(Tab, Value)
 	if Index then
-		table.remove(Tab, Index)
+		return table.remove(Tab, Index)
 	end
+	return nil
 end
 
 const IsStudio = RunService:IsStudio()
@@ -148,7 +149,7 @@ local TidalWave = {
 	NotificationHorizontalAlignment = 'Right',
 	NotificationVerticalAlignment = 'Bottom',
 	NotificationFillDirection = 'Up',
-	Version = '2.4.2-beta',
+	Version = '2.4.3-beta',
 	Theme = 'TidalWave',
 	RGBTable = {
 		Linear = {},
@@ -164,6 +165,7 @@ local TidalWave = {
 	Modules = {},
 	Buttons = {},
 	Categories = {},
+	Libraries = {},
 	Fonts = {
 		Regular = Font.fromEnum(Enum.Font.Gotham),
 		Medium = Font.fromEnum(Enum.Font.GothamMedium),
@@ -1748,17 +1750,23 @@ function TidalWave:Init()
 				Info = 'Keeps TidalWave opened when teleporting through games',
 				Enabled = function()
 					if not queueonteleport then return end
-					KeepOnTeleport:Clean(Plr.OnTeleport:Once(function()
-						local Code
-						if shared.TidalWaveDev then
-							Code = [[
-								shared.TidalWaveDev = true
-								loadstring(readfile('TidalWave/Loader.lua'), 'Loader')()
-							]]
-						else
-							Code = 'loadstring(game:HttpGet(`https://raw.githubusercontent.com/fluidnarrator30/Tidal-Wave/{readfile("TidalWave/Profiles/Commit.txt")}/Loader.lua`, true))()'
+					local Telported = false
+					KeepOnTeleport:Clean(Plr.OnTeleport:Connect(function(State)
+						if State ~= Enum.TeleportState.Failed and not Telported then
+							Telported = true
+							
+							local Code
+							if shared.TidalWaveDev then
+								Code = [[
+									shared.TidalWaveDev = true
+									loadstring(readfile('TidalWave/Loader.lua'), 'Loader')()
+								]]
+							else
+								Code = 'loadstring(game:HttpGet(`https://raw.githubusercontent.com/fluidnarrator30/Tidal-Wave/{readfile("TidalWave/Profiles/Commit.txt")}/Loader.lua`, true))()'
+							end
+							
+							queueonteleport(Code)
 						end
-						queueonteleport(Code)
 					end))
 				end
 			})
@@ -3156,7 +3164,7 @@ function TidalWave:Init()
 
 					for _, Keybind in TidalWave.ActiveKeybinds do
 						if Keybind:Check(Input) then
-							Keybind.Triggered:Fire(true)
+							Keybind.Triggered:Fire(true, Keybind.Hold)
 						end
 					end
 				end
@@ -3173,7 +3181,7 @@ function TidalWave:Init()
 			else
 				for _, Keybind in TidalWave.ActiveKeybinds do
 					if Keybind:Check(Input) then
-						Keybind.Triggered:Fire(false)
+						Keybind.Triggered:Fire(false, Keybind.Hold)
 					end
 				end
 			end
@@ -3181,7 +3189,7 @@ function TidalWave:Init()
 
 		table.insert(self.FunctionsWaitingForSignalLibrary, function()
 			self:Clean(MenuKeybind.Triggered:Connect(function(Pressed)
-				if (UIS.TouchEnabled and not Pressed) or (not UIS.TouchEnabled and Pressed) then
+				if Pressed then
 					MenuKeybindPressed()
 				end
 			end))
@@ -3429,17 +3437,9 @@ Components = {
 				Parent = TidalWave.Menus.Options.Children,
 			})
 			
-			Keybind.Triggered:Connect(function(Pressed)
-				if Keybind.Hold then
-					if Pressed then
-						Module:Enable()
-					else
-						Module:Disable()
-					end
-				else
-					if (UIS.TouchEnabled and not Pressed) or (not UIS.TouchEnabled and Pressed) then
-						Module:Toggle()
-					end
+			Keybind.Triggered:Connect(function(Pressed, Held)
+				if Pressed or (Held and Module.Enabled ~= Pressed) then
+					Module:Toggle()
 				end
 			end)
 		
@@ -4738,10 +4738,9 @@ Components = {
 							return true
 						end
 					end
-
-					return false
 				end
-				return nil
+
+				return false
 			end
 
 			const function ProcessBlacklist(Val)
@@ -4753,10 +4752,9 @@ Components = {
 							return true
 						end
 					end
-
-					return false
 				end
-				return nil
+
+				return false
 			end
 
 			const function CreateTemplate(Name, Order)
@@ -4766,6 +4764,7 @@ Components = {
 				Button.TextColor3 = GetColor('Text/Primary')
 				Button.FontFace = GetFont('Regular')
 				Button.TextSize = 20
+				Button.Name = Name
 				Button.Text = Name
 				Button.LayoutOrder = Order or 0
 				Button.ZIndex = 2
@@ -4800,8 +4799,8 @@ Components = {
 
 					const AlreadySet = {}
 
-					for _, Item in BindedOptions.Whitelist do
-						for _, Option in Item do
+					for Item, Options in BindedOptions.Whitelist do
+						for _, Option in Options do
 							if AlreadySet[Option] then continue end
 							if Val == Item then
 								AlreadySet[Option] = true
@@ -4810,8 +4809,8 @@ Components = {
 						end
 					end
 
-					for _, Item in BindedOptions.Blacklist do
-						for _, Option in Item do
+					for Item, Options in BindedOptions.Blacklist do
+						for _, Option in Options do
 							if AlreadySet[Option] then continue end
 							if Val ~= Item then
 								AlreadySet[Option] = true
@@ -4834,15 +4833,25 @@ Components = {
 				end
 			end
 
-			function Dropdown:CreateButton(ButtonProperties)
-				const Name = ButtonProperties.Name
-
+			function Dropdown:AddValue(Name)
 				if not table.find(List, Name) then
 					table.insert(List, Name)
+
+					if self.Expanded then
+						CreateTemplate(Name, #List)
+					end
 				end
-				
-				if #CreatedButtons ~= 0 then
-					CreateTemplate(Name, #List)
+			end
+
+			function Dropdown:RemoveValue(Name)
+				if table.removeValue(List, Name) and self.Expanded then
+					for i, Button in CreatedButtons do
+						if Button.Name == Name then
+							Button:Destroy()
+							table.remove(CreatedButtons, i)
+							break
+						end
+					end
 				end
 			end
 			
@@ -6008,10 +6017,12 @@ Components = {
 					Name = Properties.IsModuleKeybind and Properties.Module.Name or Properties.Name,
 					Position = Position,
 					Pressed = function()
-						self.Triggered:Fire(true)
+						if self.Hold then
+							self.Triggered:Fire(true)
+						end
 					end,
 					Released = function()
-						self.Triggered:Fire(false)
+						self.Triggered:Fire(not self.Hold)
 					end
 				})
 
