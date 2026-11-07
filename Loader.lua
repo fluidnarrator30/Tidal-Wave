@@ -175,7 +175,7 @@ else
 	writefile('TidalWave/Profiles/Gui.txt', Gui)
 end
 
-if not IsStudio then
+if not IsStudio and not shared.TidalWaveDependent then
 	if TidalWaveDev then
 		SupportedGame = isfile(`TidalWave/Games/{game.PlaceId}.lua`) and readfile(`TidalWave/Games/{game.PlaceId}.lua`) or nil
 	else
@@ -315,24 +315,27 @@ Libraries.EntityLib = Load('Libraries/EntityLib.lua', 'EntityLib')
 Libraries.Communication = Load('Libraries/Communication.lua', 'Communication')
 Libraries.Whitelist = Load('Libraries/Whitelist.lua', 'Whitelist')
 Libraries.AuraAnimations = Load('Libraries/AuraAnimations.lua', 'AuraAnimations')
-Load('Games/Universal.lua', 'Universal')
 
-if SupportedGame then
-	LoadingInfo.Text = `Loading {TidalWave.PlaceName} Modules...`
-	const Function, Result = loadstring(SupportedGame, `{TidalWave.PlaceName}/{game.PlaceId}`)
-	local Shutdown = false
-	const ShutdownFunction = function()
-		Shutdown = true
-	end
-	TidalWave:Clean(ShutdownFunction)
-	
-	if Function then
-		Function()
-		if Shutdown then return end
-		IncrementBar()
-		Libraries.table.removeValue(TidalWave.Connections, ShutdownFunction)
-	else
-		Error(`Failed to load game: '{TidalWave.PlaceName}/{game.PlaceId}'`, TidalWave.PlaceName, Result)
+if not shared.TidalWaveDependent then
+	Load('Games/Universal.lua', 'Universal')
+
+	if SupportedGame then
+		LoadingInfo.Text = `Loading {TidalWave.PlaceName} Modules...`
+		const Function, Result = loadstring(SupportedGame, `{TidalWave.PlaceName}/{game.PlaceId}`)
+		local Shutdown = false
+		const ShutdownFunction = function()
+			Shutdown = true
+		end
+		TidalWave:Clean(ShutdownFunction)
+		
+		if Function then
+			Function()
+			if Shutdown then return end
+			IncrementBar()
+			Libraries.table.removeValue(TidalWave.Connections, ShutdownFunction)
+		else
+			Error(`Failed to load game: '{TidalWave.PlaceName}/{game.PlaceId}'`, TidalWave.PlaceName, Result)
+		end
 	end
 end
 
